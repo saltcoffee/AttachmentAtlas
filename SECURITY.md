@@ -18,6 +18,10 @@ Recovery checks content before restoring and reports conflicts instead of overwr
 
 ## Scope
 
+The plugin enumerates vault file paths for complete reference checks. Its only direct Node.js filesystem operation is `lstat()` on the vault root and accessed path components to reject symbolic links; file contents are accessed through Obsidian APIs. Removing an active attachment uses `FileManager.trashFile()` after verifying the recovery copy, honoring the user's deletion preference. Recovery cleanup removes explicit plugin-owned files individually and only removes empty operation directories.
+
+Clipboard access is write-only and requires clicking **Copy recovery folder path** in History. The copied text contains only the displayed vault-relative recovery folder path. The plugin never reads the clipboard or sends the path over the network.
+
 Relevant reports include unauthorized deletion, reference misdirection, silent overwrites, path traversal, access outside the vault, unsafe image decoding, and unexpected network access. Ordinary feature requests belong in the feature template.
 
 Maintainers should acknowledge reports when practical, prioritize data integrity, and coordinate a fix and disclosure with the reporter. No response-time guarantee or bounty program is currently offered.

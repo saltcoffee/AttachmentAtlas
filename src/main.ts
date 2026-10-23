@@ -32,7 +32,7 @@ export default class AttachmentAtlas extends Plugin {
   private cleanup!: RecoveryCleanupService;
   private cleanupModal: CleanupModal | null = null;
   private unloaded = false;
-  private refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private refreshTimer: number | null = null;
   async onload(): Promise<void> {
     this.unloaded = false;
     const loaded = loadState(await this.loadData());
@@ -95,7 +95,7 @@ export default class AttachmentAtlas extends Plugin {
     this.cleanupModal?.close();
     this.cleanupModal = null;
     this.hashes.dispose();
-    if (this.refreshTimer) clearTimeout(this.refreshTimer);
+    if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
   }
   private invalidate(): void {
     this.revision++;
@@ -120,8 +120,8 @@ export default class AttachmentAtlas extends Plugin {
   }
   private progress(message: Text): void {
     this.status = message;
-    if (!this.refreshTimer)
-      this.refreshTimer = setTimeout(() => {
+    if (this.refreshTimer === null)
+      this.refreshTimer = window.setTimeout(() => {
         this.refreshTimer = null;
         this.refresh();
       }, 200);

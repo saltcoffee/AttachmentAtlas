@@ -32,14 +32,11 @@ async function setup(execute = true) {
 }
 
 describe('single recovery area lifecycle', () => {
-  it('keeps retired image bytes only in the recovery area and removes them after successful restoration', async () => {
+  it('keeps recoverable image bytes until successful restoration and then removes the operation data', async () => {
     const f = await setup();
     const blob = `${f.root}/${f.plan.retire[0]!.digest}.bin`;
     expect(await f.vault.exists('b.png')).toBe(false);
     expect(await f.disk.readBinary(blob)).toEqual(PNG);
-    expect(
-      [...f.vault.files.keys(), ...f.disk.files.keys()].some((path) => path.startsWith('.trash/')),
-    ).toBe(false);
     expect(await f.operations.restore(f.plan)).toEqual({});
     expect(await f.vault.readBinary('b.png')).toEqual(PNG);
     expect(await f.vault.readText('note.md')).toBe('![[b.png]]');

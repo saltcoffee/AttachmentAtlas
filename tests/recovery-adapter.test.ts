@@ -27,10 +27,11 @@ function setup() {
   });
   // The platform boundary is mocked; no real filesystem or Obsidian vault is opened.
   const file = Object.assign(new TFile(), { path: 'images/a.png' });
-  const deleteActive = vi.fn().mockResolvedValue(undefined),
-    trashActive = vi.fn();
+  const deleteActive = vi.fn(),
+    trashActive = vi.fn().mockResolvedValue(undefined);
   const app = {
-    vault: { adapter, getAbstractFileByPath: () => file, delete: deleteActive, trash: trashActive },
+    vault: { adapter, getAbstractFileByPath: () => file, delete: deleteActive },
+    fileManager: { trashFile: trashActive },
   } as unknown as App;
   const vault = new ObsidianVault(app);
   return { root, adapter, disk: vault.disk(), vault, file, deleteActive, trashActive };
@@ -54,11 +55,28 @@ describe('native recovery deletion boundary', () => {
     expect(f.adapter.rmdir).toHaveBeenCalledExactlyOnceWith(f.root, false);
   });
 
-  it('uses Vault.delete for one active attachment without using Obsidian trash', async () => {
+  it('uses FileManager.trashFile for one active attachment to honor deletion preferences', async () => {
     const f = setup();
     await f.vault.remove(f.file.path);
-    expect(f.deleteActive).toHaveBeenCalledExactlyOnceWith(f.file);
-    expect(f.trashActive).not.toHaveBeenCalled();
+    expect(f.trashActive).toHaveBeenCalledExactlyOnceWith(f.file);
+    expect(f.deleteActive).not.toHaveBeenCalled();
+  });
+
+  it('propagates trash failures instead of falling back to permanent deletion', async () => {
+    const fixture = setup();
+    fixture.trashActive.mockRejectedValue(new Error('Trash unavailable'));
+    await expect(fixture.vault.remove(fixture.file.path)).rejects.toThrow('Trash unavailable');
+    expect(fixture.deleteActive).not.toHaveBeenCalled();
+  });
+
+  it('blocks symbolic links before an active attachment reaches trash', async () => {
+    const fixture = setup();
+    vi.mocked(lstat).mockResolvedValue({ isSymbolicLink: () => true } as Awaited<
+      ReturnType<typeof lstat>
+    >);
+    await expect(fixture.vault.remove(fixture.file.path)).rejects.toThrow(/ymlink|ymbolic/);
+    expect(fixture.trashActive).not.toHaveBeenCalled();
+    expect(fixture.deleteActive).not.toHaveBeenCalled();
   });
 
   it.each(['.trash/existing.png', `${RECOVERY_ROOT}/plan.json`, '.obsidian/config.json'])(

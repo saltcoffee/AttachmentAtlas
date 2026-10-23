@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { App, PluginManifest, WorkspaceLeaf } from 'obsidian';
+import {
+  Setting,
+  type App,
+  type PluginManifest,
+  type SettingGroup,
+  type WorkspaceLeaf,
+} from 'obsidian';
 import AttachmentAtlas from '../src/main';
 import { ConfirmPlanModal, RestoreModal } from '../src/ui/modals';
 import { CleanupModal } from '../src/ui/cleanup-modal';
@@ -11,11 +17,13 @@ import { buildPlan } from '../src/application/plan';
 import { MemoryVault, PNG, snapshot } from './helpers';
 import { UiElement } from './ui-elements';
 import { drawing } from './excalidraw-fixtures';
+import { settingsFrom } from '../src/infrastructure/settings';
 
 const host = vi.hoisted(() => ({
   language: 'en',
   commands: [] as { id: string; name: string }[],
   ribbon: '',
+  notices: [] as string[],
 }));
 vi.mock('obsidian', async () => {
   const { UiElement } = await import('./ui-elements');
@@ -43,11 +51,27 @@ vi.mock('obsidian', async () => {
       this.el.createEl('p', { text });
       return this;
     }
-    addText() {
+    addText(callback: (input: object) => void) {
+      this.addInput('input', callback);
       return this;
     }
-    addTextArea() {
+    addTextArea(callback: (input: object) => void) {
+      this.addInput('textarea', callback);
       return this;
+    }
+    private addInput(tag: string, callback: (input: object) => void) {
+      const element = this.el.createEl(tag);
+      const input = {
+        setValue(value: string) {
+          element.value = value;
+          return input;
+        },
+        onChange(onChange: (value: string) => void) {
+          element.onchange = () => onChange(element.value);
+          return input;
+        },
+      };
+      callback(input);
     }
     addButton(callback: (button: object) => void) {
       const element = this.el.createEl('button');
@@ -59,7 +83,8 @@ vi.mock('obsidian', async () => {
         setCta() {
           return button;
         },
-        onClick() {
+        onClick(onClick: () => void) {
+          element.onclick = onClick;
           return button;
         },
       };
@@ -88,7 +113,11 @@ vi.mock('obsidian', async () => {
     PluginSettingTab,
     Setting,
     Plugin,
-    Notice: class {},
+    Notice: class {
+      constructor(text: string) {
+        host.notices.push(text);
+      }
+    },
     FileSystemAdapter: class {},
     MarkdownView: class {},
     TFile: class {},
@@ -98,6 +127,19 @@ vi.mock('obsidian', async () => {
 
 function elements(element: HTMLElement): UiElement {
   return element as unknown as UiElement;
+}
+function renderSettings(tab: AtlasSettingsTab): UiElement {
+  const container = elements(tab.containerEl);
+  for (const definition of tab.getSettingDefinitions()) {
+    if (!('type' in definition) || definition.type !== 'group') continue;
+    for (const item of definition.items ?? []) {
+      if ('type' in item) continue;
+      const setting = new Setting(container as unknown as HTMLElement).setName(item.name);
+      if (typeof item.desc === 'string') setting.setDesc(item.desc);
+      if ('render' in item) item.render?.(setting, {} as SettingGroup);
+    }
+  }
+  return container;
 }
 const app = {
   vault: { adapter: { getResourcePath: (path: string) => path }, on: () => ({}) },
@@ -109,6 +151,7 @@ describe('localized plugin surfaces', () => {
     host.language = 'en';
     host.commands = [];
     host.ribbon = '';
+    host.notices = [];
   });
   it.each([
     [
@@ -158,8 +201,7 @@ describe('localized plugin surfaces', () => {
         language === 'zh' ? '打开 Attachment Atlas' : 'Open Attachment Atlas',
       );
       const settings = new AtlasSettingsTab(app, plugin);
-      settings.display();
-      expect(elements(settings.containerEl).contents()).toContain(save);
+      expect(renderSettings(settings).contents()).toContain(save);
 
       const vault = new MemoryVault({
         'Scan vault.png': PNG,
@@ -249,6 +291,62 @@ describe('localized plugin surfaces', () => {
       plugin.onunload();
     },
   );
+
+  it('indexes settings without side effects and saves a normalized draft only on confirmation', async () => {
+    const saved = settingsFrom({ scope: '', preferredFolder: '', protectedPaths: [] });
+    const updateSettings = vi.fn().mockResolvedValue(undefined);
+    const plugin = { settings: saved, updateSettings } as unknown as AttachmentAtlas;
+    const tab = new AtlasSettingsTab(app, plugin);
+    const definitions = tab.getSettingDefinitions();
+    const group = definitions[0];
+    expect(
+      group && 'type' in group && group.type === 'group' && group.items?.map((item) => item.name),
+    ).toEqual(['', 'Image scope', 'Preferred retained folder', 'Protected paths', 'Save settings']);
+    expect(updateSettings).not.toHaveBeenCalled();
+    expect(elements(tab.containerEl).all()).toHaveLength(1);
+
+    const container = renderSettings(tab);
+    const inputs = container.all().filter((element) => ['input', 'textarea'].includes(element.tag));
+    for (const [index, value] of [
+      ' images ',
+      ' images/retained ',
+      ' important \n\n notes ',
+    ].entries()) {
+      inputs[index]!.value = value;
+      inputs[index]!.onchange?.();
+    }
+    expect(plugin.settings).toEqual(saved);
+    expect(updateSettings).not.toHaveBeenCalled();
+    container
+      .all()
+      .find((element) => element.tag === 'button')!
+      .onclick?.();
+    await vi.waitFor(() => expect(host.notices).toContain('Attachment Atlas settings saved.'));
+    expect(updateSettings).toHaveBeenCalledExactlyOnceWith({
+      scope: 'images',
+      preferredFolder: 'images/retained',
+      protectedPaths: ['important', 'notes'],
+    });
+  });
+
+  it('reports invalid drafts without changing persisted settings', async () => {
+    const saved = settingsFrom({ scope: '', preferredFolder: '', protectedPaths: [] });
+    const updateSettings = vi.fn(async (value: unknown) => {
+      settingsFrom(value);
+    });
+    const plugin = { settings: saved, updateSettings } as unknown as AttachmentAtlas;
+    const container = renderSettings(new AtlasSettingsTab(app, plugin));
+    const input = container.all().find((element) => element.tag === 'input')!;
+    input.value = '../outside-vault';
+    input.onchange?.();
+    container
+      .all()
+      .find((element) => element.tag === 'button')!
+      .onclick?.();
+    await vi.waitFor(() => expect(host.notices.join('\n')).toContain('Invalid settings.'));
+    expect(plugin.settings).toEqual(saved);
+    expect(host.notices).not.toContain('Attachment Atlas settings saved.');
+  });
   it('reads changes from Obsidian and translates states without changing stored state strings', () => {
     host.language = 'zh-TW';
     expect(t('History')).toBe('操作历史');

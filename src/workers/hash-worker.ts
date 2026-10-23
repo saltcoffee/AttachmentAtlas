@@ -1,5 +1,5 @@
 import { digest, MAX_IMAGE } from '../domain/model';
-globalThis.onmessage = (event: MessageEvent<unknown>) => {
+self.onmessage = (event: MessageEvent<unknown>) => {
   const message = event.data as { version?: unknown; id?: unknown; data?: unknown } | null;
   if (
     !message ||
@@ -11,6 +11,6 @@ globalThis.onmessage = (event: MessageEvent<unknown>) => {
     return;
   const { id, data } = message;
   void digest(data)
-    .then((hash) => globalThis.postMessage({ version: 1, id, hash }))
-    .catch(() => globalThis.postMessage({ version: 1, id, error: 'Image fingerprint failed.' }));
+    .then((hash) => self.postMessage({ version: 1, id, hash }))
+    .catch(() => self.postMessage({ version: 1, id, error: 'Image fingerprint failed.' }));
 };

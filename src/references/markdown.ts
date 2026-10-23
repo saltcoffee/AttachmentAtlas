@@ -72,7 +72,7 @@ export function parseMarkdown(text: string, source: string): Parsed {
     }
     node.children?.forEach(visit);
   }
-  visit(fromMarkdown(text) as SyntaxNode);
+  visit(fromMarkdown(text));
   const wiki = /!?\[\[([^\]\r\n]+)\]\]/g;
   for (const match of text.matchAll(wiki)) {
     const start = match.index;

@@ -4,6 +4,20 @@ Notable user-facing changes are recorded here. Version entries are used as relea
 
 ## [Unreleased]
 
+## [0.1.1]
+
+### Changed
+
+- Requires Obsidian desktop 1.13.0 or later. Settings use the declarative API for native headings and settings search, while retaining explicit saving and path validation.
+- Image recycling follows Obsidian's deletion preference through `FileManager.trashFile()` after verifying the plugin recovery copy. Trash copies are managed separately by Obsidian or the operating system.
+- GitHub Releases contain only `main.js`, `manifest.json`, and `styles.css`, with build provenance attestations for all three. Manual installation ZIPs remain available through local packaging.
+
+### Fixed
+
+- Uses window timers for UI and hashing timeouts, and the Worker scope for fingerprint messages.
+- Removes redundant type assertions and deprecated Zod finite-number checks; non-finite recovery timestamps remain invalid.
+- Adds lint checks for the automated review's source rules and documents the purpose of filesystem checks, vault enumeration, and clipboard writes.
+
 ## [0.1.0]
 
 ### Added

@@ -84,7 +84,7 @@ export class ObsidianVault implements VaultPort {
   async remove(path: string): Promise<void> {
     assert(active(path), 'Only active attachment paths can be removed.');
     await this.guard(path);
-    await this.app.vault.delete(this.file(path));
+    await this.app.fileManager.trashFile(this.file(path));
   }
   disk(): RecoveryDisk {
     const adapter = this.app.vault.adapter;

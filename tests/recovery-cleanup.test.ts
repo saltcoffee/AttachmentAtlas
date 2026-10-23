@@ -29,6 +29,18 @@ async function setup(execute = true) {
 }
 
 describe('recovery cleanup eligibility and preview', () => {
+  it.each([NaN, Infinity, -Infinity])(
+    'rejects a non-finite cleanup timestamp: %s',
+    async (createdAt) => {
+      const fixture = await setup();
+      const preview = await fixture.cleanup.preview([fixture.plan.id]);
+      expect(() =>
+        validateCleanupRecord({ ...preview.selections[0]!.record, createdAt }),
+      ).toThrow();
+      expect(fixture.disk.removed).toEqual([]);
+    },
+  );
+
   it('previews exact paths and sizes without writing or deleting anything', async () => {
     const f = await setup(),
       before = new Map(f.disk.files),

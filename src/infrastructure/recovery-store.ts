@@ -51,7 +51,7 @@ const hashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 const planSchema = z
   .object({
     id: z.uuid(),
-    createdAt: z.number().finite(),
+    createdAt: z.number(),
     revision: z.number().int().nonnegative(),
     kind: z.enum(['merge-exact', 'recycle-unreferenced']),
     retire: z
@@ -88,7 +88,7 @@ const eventSchema = z
   .object({
     sequence: z.number().int().nonnegative(),
     state: z.string().max(500),
-    at: z.number().finite(),
+    at: z.number(),
   })
   .strict();
 export class RecoveryStore {
@@ -391,7 +391,7 @@ export class RecoveryStore {
         (await digest(textBytes(text))) === selection.markerDigest,
         'Cleanup marker changed. Preview cleanup again.',
       );
-      return selection.markerDigest!;
+      return selection.markerDigest;
     }
     assert(!(await this.disk.exists(marker)), 'Cleanup already started. Preview cleanup again.');
     const text = await serializeCleanupRecord(record);
