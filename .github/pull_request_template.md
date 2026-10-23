@@ -1,14 +1,8 @@
-## Problem and resulting behavior
+## Summary
 
-Describe the concrete user problem and what the change does.
+<!-- Describe what changed and why. English or Chinese is welcome. -->
 
 ## Verification
 
-List relevant checks and results. For reference or write-path changes, include a synthetic example and reference, cancellation, and trash-failure verification.
-
-## Scope and documentation
-
-- [ ] Planned versus implemented behavior is accurately described.
-- [ ] Applicable support boundaries and documentation are updated.
-- [ ] No private vault content, backups, secrets, or generated release bundles are included.
-- [ ] Third-party material has appropriate licensing and notices, if applicable.
+<!-- List checks and results: npm run check for code, or npm run check:docs for documentation. -->
+<!-- For plugin behavior changes, include any manual checks performed in Obsidian. -->
