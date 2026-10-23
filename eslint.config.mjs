@@ -22,4 +22,17 @@ export default ts.config(
       'obsidianmd/commands/no-plugin-name-in-command-name': 'error',
     },
   },
+  {
+    files: ['src/**/*.ts'],
+    languageOptions: { parserOptions: { projectService: true } },
+    rules: {
+      '@typescript-eslint/no-unnecessary-type-assertion': 'error',
+      '@typescript-eslint/no-deprecated': 'error',
+      'obsidianmd/settings-tab/no-manual-html-headings': 'error',
+      'obsidianmd/settings-tab/prefer-setting-definitions': 'error',
+      'obsidianmd/prefer-window-timers': 'error',
+      'obsidianmd/prefer-file-manager-trash-file': 'error',
+      'obsidianmd/no-global-this': 'error',
+    },
+  },
 );

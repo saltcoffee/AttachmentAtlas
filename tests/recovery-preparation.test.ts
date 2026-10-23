@@ -17,6 +17,18 @@ async function setup() {
 }
 
 describe('recovery preparation failures', () => {
+  it.each([NaN, Infinity, -Infinity])(
+    'rejects a non-finite plan timestamp: %s',
+    async (createdAt) => {
+      const fixture = await setup();
+      await expect(
+        fixture.recovery.prepare({ ...fixture.plan, createdAt }, fixture.vault),
+      ).rejects.toThrow();
+      expect(fixture.disk.writeCount).toBe(0);
+      expect(fixture.vault.removed).toEqual([]);
+    },
+  );
+
   it('discards only its empty folder after a first-write failure and allows retry after restart', async () => {
     const f = await setup();
     f.disk.failOnWrite = 1;

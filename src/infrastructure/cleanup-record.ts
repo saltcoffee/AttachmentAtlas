@@ -21,7 +21,7 @@ const fileSchema = z
 const schema = z
   .object({
     id: z.uuid(),
-    createdAt: z.number().finite(),
+    createdAt: z.number(),
     kind: z.enum(['merge-exact', 'recycle-unreferenced']),
     state: z.enum(FINISHED_RECOVERY_STATES),
     files: z.array(fileSchema).min(1).max(10_000),

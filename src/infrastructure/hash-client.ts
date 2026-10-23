@@ -7,7 +7,7 @@ export class HashClient {
     id: number;
     resolve: (value: string) => void;
     reject: (error: Error) => void;
-    timer: ReturnType<typeof setTimeout>;
+    timer: number;
   } | null = null;
   hash = (data: ArrayBuffer): Promise<string> => {
     assert(data.byteLength <= MAX_IMAGE, 'Fingerprint task exceeds its byte budget.');
@@ -31,7 +31,7 @@ export class HashClient {
         const pending = this.pending;
         if (!value || value.version !== 1 || !pending || value.id !== pending.id) return;
         this.pending = null;
-        clearTimeout(pending.timer);
+        window.clearTimeout(pending.timer);
         if (typeof value.hash === 'string' && /^[a-f0-9]{64}$/.test(value.hash))
           pending.resolve(value.hash);
         else pending.reject(new Error('Invalid fingerprint worker response.'));
@@ -40,13 +40,18 @@ export class HashClient {
     }
     return new Promise((resolve, reject) => {
       const id = ++this.sequence;
-      this.pending = { id, resolve, reject, timer: setTimeout(() => this.dispose(), 60_000) };
+      this.pending = {
+        id,
+        resolve,
+        reject,
+        timer: window.setTimeout(() => this.dispose(), 60_000),
+      };
       this.worker!.postMessage({ version: 1, id, data }, [data]);
     });
   };
   dispose(): void {
     if (this.pending) {
-      clearTimeout(this.pending.timer);
+      window.clearTimeout(this.pending.timer);
       this.pending.reject(new Error('Fingerprint task stopped.'));
       this.pending = null;
     }

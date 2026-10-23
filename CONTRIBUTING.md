@@ -47,7 +47,7 @@ The documentation check validates public Markdown for UTF-8, final newlines, tra
 - Use precise source patches for links; never globally replace attachment filenames.
 - Keep scanning read-only with respect to notes and attachments.
 - Require explicit plans and verified recovery copies before user-content writes or recycling.
-- Keep recycled resources only in `.attachment-atlas-recovery/`: verify durable copies before removing active files with `Vault.delete`; never use Obsidian or system trash.
+- Verify durable recovery copies in `.attachment-atlas-recovery/` before removing active files with `FileManager.trashFile()` to respect Obsidian's deletion preference. Do not manage Obsidian or system trash copies.
 - Manual recovery-data cleanup requires explicit permanent-deletion consent and a revalidated manifest. Verified full restoration authorizes automatic disposal of that operation only. Both paths require persisted interruption state and per-file removal, never recursive directory deletion.
 - Do not add unattended expiry of unrestored resources, telemetry, or runtime dependency downloads. Disposal after a user-confirmed, fully verified restore is part of the recovery lifecycle.
 
@@ -88,9 +88,9 @@ The Release workflow runs only when a version tag such as `0.1.0` is pushed. Ord
    git push origin 0.1.0
    ```
 
-Use the intended version in place of `0.1.0`. The workflow checks the tagged source, builds once, packages the verified output, and hands an explicit artifact list to a separate publishing job. Only that job receives `contents: write`; it uses GitHub's automatic `GITHUB_TOKEN`, with no personal token required. GitHub Actions must be enabled and repository/organization policy must allow that permission and the pinned official actions.
+Use the intended version in place of `0.1.0`. The workflow checks the tagged source, builds once, attests the three plugin assets, and hands an explicit artifact list to a separate publishing job. The build job receives `id-token: write` and `attestations: write` to sign and store provenance; only the publishing job receives `contents: write`. Both use GitHub's automatic `GITHUB_TOKEN`, with no personal token required. GitHub Actions must be enabled and repository/organization policy must allow those permissions and the pinned official actions.
 
-The published release contains `main.js`, `manifest.json`, `styles.css`, and `attachment-atlas-<version>.zip`. The ZIP contains the `attachment-atlas/` installation folder with the three plugin files and license notices. The body comes from that version's changelog section. GitHub supplies the source ZIP and tarball. Local-only `docs/`, test vaults, and recovery data are excluded from the uploaded assets.
+The published release contains only `main.js`, `manifest.json`, and `styles.css`, the assets supported by Obsidian. GitHub stores build provenance attestations for all three; verify a downloaded asset with `gh attestation verify main.js --repo saltcoffee/AttachmentAtlas`. The body comes from that version's changelog section. GitHub supplies the source ZIP and tarball. `npm run package` still creates a local installation ZIP with license notices; it is not uploaded to Releases. Local-only `docs/`, test vaults, and recovery data are excluded from the uploaded assets.
 
 Assets are uploaded to a draft first, and the workflow publishes only after all uploads succeed. It verifies that the remote tag still resolves to the built commit, supports annotated tags, and stops if an existing release prevents creation. If an interrupted upload leaves a draft, inspect and complete that draft manually or remove that specific draft before rerunning the failed job. Do not move a published version tag; publish a new version for corrections. Creating a GitHub Release does not submit the plugin to the Obsidian community directory.
 
