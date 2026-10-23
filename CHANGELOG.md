@@ -4,6 +4,12 @@ Notable user-facing changes are recorded here. Version entries are used as relea
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-10-23
+
+### Fixed
+
+- Uses `FileManager.trashFile()` without disabling the required review rule. Image deletion now follows Obsidian's deleted-file setting, including permanent deletion when selected. Confirmation dialogs and documentation explain that permanently deleted images cannot be restored from trash.
+
 ## [0.1.2] - 2026-10-23
 
 ### Changed

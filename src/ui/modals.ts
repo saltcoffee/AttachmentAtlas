@@ -30,7 +30,7 @@ export class ConfirmPlanModal extends Modal {
     });
     el.createEl('p', {
       text: t(
-        'The listed images will be moved to the system trash. If system trash is unavailable, Obsidian uses the vault’s .trash/ folder. Updated references are not automatically restored. Pause edits on other devices during cleanup.',
+        'Images will be deleted according to Obsidian’s “Deleted files” setting: system trash, vault trash, or permanent deletion. Permanently deleted images cannot be restored. Updated references are not automatically restored. Pause edits on other devices during cleanup.',
       ),
     });
     if (this.plan.keep[0])
@@ -57,13 +57,15 @@ export class ConfirmPlanModal extends Modal {
     const label = el.createEl('label', { cls: 'atlas-consent' });
     const consent = label.createEl('input', { type: 'checkbox' });
     label.createSpan({
-      text: t('I reviewed the file paths and understand how deleted images can be restored.'),
+      text: t(
+        'I reviewed the file paths and understand that Obsidian’s setting may permanently delete these images.',
+      ),
     });
     const actions = el.createDiv({ cls: 'atlas-actions' });
     const cancel = actions.createEl('button', { text: t('Cancel') });
     cancel.onclick = () => this.close();
     const button = actions.createEl('button', {
-      text: t('Recycle {count} images', { count: this.plan.retire.length }),
+      text: t('Delete {count} images', { count: this.plan.retire.length }),
       cls: 'mod-warning',
     });
     button.disabled = true;

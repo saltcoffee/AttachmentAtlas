@@ -72,17 +72,17 @@ export const zh = {
   'Retain: {path}': '保留：{path}',
   '{count} images · {size} active-image reduction · {documents} documents to update':
     '{count} 张图片 · 活动图片减少 {size} · 需更新 {documents} 份文档',
-  'Recycle {count} images': '回收 {count} 张图片',
+  'Delete {count} images': '删除 {count} 张图片',
   'Stopped. Review the error and scan again.': '任务已停止，请查看错误并重新扫描。',
-  'Completed. Restore images from the system trash or the vault’s .trash/ folder.':
-    '清理完成，需要时可从系统废纸篓或知识库的 .trash/ 文件夹找回图片。',
+  'Completed. Images were deleted according to Obsidian’s deleted-file setting.':
+    '清理完成，图片已按 Obsidian 的删除设置处理。',
   'Cleanup stopped. Applied changes are kept. Scan again before continuing.':
     '清理已停止，已完成的改动会保留。请重新扫描后继续。',
   'Recycling image: {path}': '正在回收图片：{path}',
-  'The listed images will be moved to the system trash. If system trash is unavailable, Obsidian uses the vault’s .trash/ folder. Updated references are not automatically restored. Pause edits on other devices during cleanup.':
-    '这些图片将移入系统废纸篓；系统废纸篓不可用时，Obsidian 会使用知识库的 .trash/ 文件夹。已更新的引用不会自动还原。清理期间请暂停其他设备上的编辑。',
-  'I reviewed the file paths and understand how deleted images can be restored.':
-    '我已核对文件路径，并了解如何从回收站找回图片。',
+  'Images will be deleted according to Obsidian’s “Deleted files” setting: system trash, vault trash, or permanent deletion. Permanently deleted images cannot be restored. Updated references are not automatically restored. Pause edits on other devices during cleanup.':
+    '图片将按 Obsidian 的“删除文件”设置处理：移入系统废纸篓、知识库回收站或永久删除。永久删除的图片无法找回。已更新的引用不会自动还原。清理期间请暂停其他设备上的编辑。',
+  'I reviewed the file paths and understand that Obsidian’s setting may permanently delete these images.':
+    '我已核对文件路径，并了解 Obsidian 的设置可能导致这些图片被永久删除。',
   'Operation failed: {detail}': '操作失败：{detail}',
   Unreferenced: '未引用',
   Unsupported: '不支持',

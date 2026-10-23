@@ -32,8 +32,7 @@ function setup(trashOption: 'system' | 'local' | 'none' = 'system') {
   const trashActive = vi.fn(async (_target: TFile, _system: boolean) => {
     activePaths.delete(file.path);
   });
-  // Model FileManager.trashFile's setting-dependent routing so a regression
-  // reaches permanent deletion when the host is configured with "none".
+  // Model the host's deletion preferences at the FileManager boundary.
   const trashViaPreference = vi.fn(async (target: TFile) => {
     if (trashOption === 'none') await deleteActive(target);
     else await trashActive(target, trashOption === 'system');
@@ -51,7 +50,7 @@ function setup(trashOption: 'system' | 'local' | 'none' = 'system') {
   return { vault, file, activePaths, deleteActive, trashActive, trashViaPreference };
 }
 
-describe('native attachment trash boundary', () => {
+describe('native attachment deletion boundary', () => {
   beforeEach(() => {
     vi.mocked(lstat).mockReset();
     vi.mocked(lstat).mockResolvedValue({ isSymbolicLink: () => false } as Awaited<
@@ -60,25 +59,34 @@ describe('native attachment trash boundary', () => {
   });
 
   it.each(['system', 'local', 'none'] as const)(
-    'requests system trash regardless of the host deletion setting: %s',
+    'delegates deletion to FileManager and respects the host setting: %s',
     async (trashOption) => {
       const f = setup(trashOption);
       await f.vault.remove(f.file.path);
-      expect(f.trashActive).toHaveBeenCalledExactlyOnceWith(f.file, true);
-      expect(f.deleteActive).not.toHaveBeenCalled();
-      expect(f.trashViaPreference).not.toHaveBeenCalled();
+      expect(f.trashViaPreference).toHaveBeenCalledExactlyOnceWith(f.file);
+      if (trashOption === 'none') {
+        expect(f.deleteActive).toHaveBeenCalledExactlyOnceWith(f.file);
+        expect(f.trashActive).not.toHaveBeenCalled();
+      } else {
+        expect(f.trashActive).toHaveBeenCalledExactlyOnceWith(f.file, trashOption === 'system');
+        expect(f.deleteActive).not.toHaveBeenCalled();
+      }
       expect(f.activePaths.has(f.file.path)).toBe(false);
     },
   );
 
-  it('propagates trash failures instead of falling back to permanent deletion', async () => {
-    const fixture = setup('none');
-    fixture.trashActive.mockRejectedValue(new Error('Trash unavailable'));
-    await expect(fixture.vault.remove(fixture.file.path)).rejects.toThrow('Trash unavailable');
-    expect(fixture.deleteActive).not.toHaveBeenCalled();
-    expect(fixture.trashViaPreference).not.toHaveBeenCalled();
-    expect(fixture.activePaths.has(fixture.file.path)).toBe(true);
-  });
+  it.each(['system', 'local', 'none'] as const)(
+    'propagates FileManager failures without a deletion fallback: %s',
+    async (trashOption) => {
+      const fixture = setup(trashOption);
+      fixture.trashViaPreference.mockRejectedValue(new Error('Deletion failed'));
+      await expect(fixture.vault.remove(fixture.file.path)).rejects.toThrow('Deletion failed');
+      expect(fixture.trashViaPreference).toHaveBeenCalledExactlyOnceWith(fixture.file);
+      expect(fixture.deleteActive).not.toHaveBeenCalled();
+      expect(fixture.trashActive).not.toHaveBeenCalled();
+      expect(fixture.activePaths.has(fixture.file.path)).toBe(true);
+    },
+  );
 
   it('blocks symbolic links before an active attachment reaches trash', async () => {
     const fixture = setup();
@@ -88,6 +96,7 @@ describe('native attachment trash boundary', () => {
     await expect(fixture.vault.remove(fixture.file.path)).rejects.toThrow(/ymlink|ymbolic/);
     expect(fixture.trashActive).not.toHaveBeenCalled();
     expect(fixture.deleteActive).not.toHaveBeenCalled();
+    expect(fixture.trashViaPreference).not.toHaveBeenCalled();
   });
 
   it.each(['.trash/existing.png', '.private-fixture/data.bin', '.obsidian/config.json'])(
@@ -97,6 +106,7 @@ describe('native attachment trash boundary', () => {
       await expect(f.vault.remove(path)).rejects.toThrow('Only active attachment');
       expect(f.deleteActive).not.toHaveBeenCalled();
       expect(f.trashActive).not.toHaveBeenCalled();
+      expect(f.trashViaPreference).not.toHaveBeenCalled();
     },
   );
 });

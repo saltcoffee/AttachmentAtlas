@@ -152,14 +152,14 @@ describe('localized plugin surfaces', () => {
     host.notices = [];
   });
   it.each([
-    ['zh', '扫描库内图片', '扫描当前库', '完全重复', '保存设置', '回收 1 张图片', '取消'],
+    ['zh', '扫描库内图片', '扫描当前库', '完全重复', '保存设置', '删除 1 张图片', '取消'],
     [
       'en',
       'Scan vault images',
       'Scan vault',
       'Exact duplicates',
       'Save settings',
-      'Recycle 1 images',
+      'Delete 1 images',
       'Cancel',
     ],
     [
@@ -168,7 +168,7 @@ describe('localized plugin surfaces', () => {
       'Scan vault',
       'Exact duplicates',
       'Save settings',
-      'Recycle 1 images',
+      'Delete 1 images',
       'Cancel',
     ],
   ])(
@@ -212,8 +212,17 @@ describe('localized plugin surfaces', () => {
       const modal = new ConfirmPlanModal(app, plan, confirm);
       modal.onOpen();
       const nodes = elements(modal.contentEl).all();
-      expect(elements(modal.contentEl).contents()).toContain(
-        language === 'zh' ? '废纸篓' : 'system trash',
+      const confirmationText = elements(modal.contentEl).contents();
+      expect(confirmationText).toContain(language === 'zh' ? '废纸篓' : 'system trash');
+      expect(confirmationText).toContain(
+        language === 'zh'
+          ? '永久删除的图片无法找回'
+          : 'Permanently deleted images cannot be restored',
+      );
+      expect(confirmationText).toContain(
+        language === 'zh'
+          ? '我已核对文件路径，并了解 Obsidian 的设置可能导致这些图片被永久删除。'
+          : 'I reviewed the file paths and understand that Obsidian’s setting may permanently delete these images.',
       );
       const button = nodes.find((node) => node.tag === 'button' && node.text === recycle)!;
       const consent = nodes.find((node) => node.attrs.type === 'checkbox')!;
