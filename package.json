@@ -1,0 +1,53 @@
+{
+  "name": "attachment-atlas",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Reference-aware image cleanup for Obsidian.",
+  "type": "module",
+  "main": "main.js",
+  "author": "gua",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/saltcoffee/AttachmentAtlas.git"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "overrides": {
+    "moment": "2.31.0"
+  },
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src tests",
+    "test": "vitest run",
+    "build": "npm run typecheck && node esbuild.config.mjs production",
+    "check:docs": "python3 scripts/check_docs.py",
+    "check:release": "node scripts/check-release.mjs",
+    "release:notes": "node scripts/release-notes.mjs",
+    "package": "npm run build && node scripts/package.mjs",
+    "check": "npm run typecheck && npm run lint && npm test && npm run build && npm run check:release && npm run check:docs"
+  },
+  "dependencies": {
+    "jsonc-parser": "^3.3.1",
+    "lz-string": "1.5.0",
+    "mdast-util-from-markdown": "^2.0.2",
+    "micromark-util-decode-string": "^2.0.1",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@types/mdast": "^4.0.4",
+    "@types/node": "^22.15.17",
+    "esbuild": "^0.25.5",
+    "eslint": "^9.39.4",
+    "eslint-plugin-obsidianmd": "^0.4.0",
+    "globals": "^17.6.0",
+    "obsidian": "1.14.4",
+    "prettier": "^3.9.6",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.59.1",
+    "vitest": "^4.0.0"
+  }
+}

@@ -1,0 +1,40 @@
+# Dependencies, local build output, and caches
+node_modules/
+dist/
+build/
+coverage/
+.cache/
+__pycache__/
+*.pyc
+*.tsbuildinfo
+.vitest/
+.eslintcache
+/release/
+/artifacts/
+/test-results/
+/playwright-report/
+/npm-cache/
+
+# Generated plugin release bundles belong in GitHub Release assets
+/main.js
+/main.js.map
+
+# Local product plans, architecture, development notes, and acceptance records
+/docs/
+
+# Local vaults, recovery data, editor settings, and secrets
+/dev-vault/
+.obsidian/
+.attachment-atlas-recovery/
+.trash/
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log
+.idea/
+.vscode/
+*.local
+/data.json
+/index.json
+/obsidian-local-rest-api.log

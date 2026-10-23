@@ -1,0 +1,10 @@
+{
+  "id": "attachment-atlas",
+  "name": "Attachment Atlas",
+  "version": "0.1.0",
+  "minAppVersion": "1.8.7",
+  "description": "Find duplicate and unreferenced images, inspect references, and recycle images with recoverable changes.",
+  "author": "gua",
+  "authorUrl": "https://github.com/saltcoffee",
+  "isDesktopOnly": true
+}

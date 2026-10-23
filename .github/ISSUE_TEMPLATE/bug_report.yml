@@ -1,0 +1,44 @@
+name: Bug report
+description: Report a reproducible problem using a minimal synthetic example.
+title: '[Bug] '
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The project has a 0.1.0 development build and no stable plugin release.
+        Documentation defects are welcome. Use SECURITY.md for sensitive issues.
+        Never upload private vaults or complete recovery archives.
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Plugin version or documentation revision, plus Obsidian version if relevant.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Operating system and relevant plugins
+      description: Include desktop/mobile status and plugins that affect attachments or links.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproduction
+      description: Steps and a small synthetic Markdown or Canvas example. Sanitize file paths.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: Include coverage status or operation state if relevant. Remove private content from logs.
+    validations:
+      required: true

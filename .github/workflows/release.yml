@@ -1,0 +1,97 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - '[0-9]*.[0-9]*.[0-9]*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      commit: ${{ steps.prepare.outputs.commit }}
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          clean: false
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Validate version and prepare release notes
+        id: prepare
+        run: |
+          npm run release:notes
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Run checks and production build
+        run: npm run check
+      - name: Package verified build
+        run: node scripts/package.mjs
+      - name: Preserve explicit release assets
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-assets
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            main.js
+            manifest.json
+            styles.css
+            release/attachment-atlas-${{ github.ref_name }}.zip
+            build/release-notes.md
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified assets
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-assets
+          digest-mismatch: error
+      - name: Create and publish release with all assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_COMMIT: ${{ needs.build.outputs.commit }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_object=$(gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG")
+          release_type=$(jq -r '.object.type' <<< "$release_object")
+          release_sha=$(jq -r '.object.sha' <<< "$release_object")
+          for ((depth = 0; depth < 8; depth++)); do
+            if [[ "$release_type" != tag ]]; then break; fi
+            release_object=$(gh api "repos/$GH_REPO/git/tags/$release_sha")
+            release_type=$(jq -r '.object.type' <<< "$release_object")
+            release_sha=$(jq -r '.object.sha' <<< "$release_object")
+          done
+          if [[ "$release_type" != commit || "$release_sha" != "$RELEASE_COMMIT" ]]; then
+            echo "Tag no longer points to the verified source commit. Release stopped." >&2
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" \
+            --repo "$GH_REPO" --verify-tag --draft \
+            --title "Attachment Atlas $RELEASE_TAG" \
+            --notes-file build/release-notes.md \
+            main.js manifest.json styles.css "release/attachment-atlas-$RELEASE_TAG.zip"
+          gh release edit "$RELEASE_TAG" --repo "$GH_REPO" --draft=false

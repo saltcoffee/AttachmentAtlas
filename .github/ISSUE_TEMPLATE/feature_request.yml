@@ -1,0 +1,28 @@
+name: Feature request
+description: Propose a concrete attachment-management improvement.
+title: '[Feature] '
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: User problem
+      description: Describe the workflow, frequency, and practical impact.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Proposed behavior
+      description: Include affected files, reference formats, and desired preview or recovery behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Existing approaches and alternatives
+      description: Explain why current workflows or plugins do not solve the problem.
+  - type: textarea
+    id: examples
+    attributes:
+      label: Synthetic examples
+      description: Use generated examples rather than private notes or images.
