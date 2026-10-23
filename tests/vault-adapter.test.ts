@@ -3,8 +3,7 @@ import type { App } from 'obsidian';
 import { FileSystemAdapter, TFile } from 'obsidian';
 import { lstat } from 'node:fs/promises';
 import { ObsidianVault } from '../src/infrastructure/obsidian-vault';
-import { DEFAULT_SETTINGS, RECOVERY_ROOT, digest } from '../src/domain/model';
-import { recoveryDirectory } from '../src/domain/recovery';
+import { DEFAULT_SETTINGS, digest } from '../src/domain/model';
 import { parseSource } from '../src/references';
 import { scan } from '../src/application/scan';
 import { MemoryVault, PNG } from './helpers';
@@ -16,8 +15,7 @@ vi.mock('obsidian', () => ({
 }));
 vi.mock('node:fs/promises', () => ({ lstat: vi.fn() }));
 
-function setup() {
-  const root = recoveryDirectory(crypto.randomUUID());
+function setup(trashOption: 'system' | 'local' | 'none' = 'system') {
   const adapter = Object.assign(new FileSystemAdapter(), {
     getBasePath: () => '/fixture-vault',
     stat: vi.fn().mockResolvedValue({ type: 'file', size: 10 }),
@@ -27,17 +25,33 @@ function setup() {
   });
   // The platform boundary is mocked; no real filesystem or Obsidian vault is opened.
   const file = Object.assign(new TFile(), { path: 'images/a.png' });
-  const deleteActive = vi.fn(),
-    trashActive = vi.fn().mockResolvedValue(undefined);
+  const activePaths = new Set([file.path]);
+  const deleteActive = vi.fn(async (_target: TFile) => {
+    activePaths.delete(file.path);
+  });
+  const trashActive = vi.fn(async (_target: TFile, _system: boolean) => {
+    activePaths.delete(file.path);
+  });
+  // Model FileManager.trashFile's setting-dependent routing so a regression
+  // reaches permanent deletion when the host is configured with "none".
+  const trashViaPreference = vi.fn(async (target: TFile) => {
+    if (trashOption === 'none') await deleteActive(target);
+    else await trashActive(target, trashOption === 'system');
+  });
   const app = {
-    vault: { adapter, getAbstractFileByPath: () => file, delete: deleteActive },
-    fileManager: { trashFile: trashActive },
+    vault: {
+      adapter,
+      getAbstractFileByPath: (path: string) => (activePaths.has(path) ? file : null),
+      delete: deleteActive,
+      trash: trashActive,
+    },
+    fileManager: { trashFile: trashViaPreference },
   } as unknown as App;
   const vault = new ObsidianVault(app);
-  return { root, adapter, disk: vault.disk(), vault, file, deleteActive, trashActive };
+  return { vault, file, activePaths, deleteActive, trashActive, trashViaPreference };
 }
 
-describe('native recovery deletion boundary', () => {
+describe('native attachment trash boundary', () => {
   beforeEach(() => {
     vi.mocked(lstat).mockReset();
     vi.mocked(lstat).mockResolvedValue({ isSymbolicLink: () => false } as Awaited<
@@ -45,28 +59,25 @@ describe('native recovery deletion boundary', () => {
     >);
   });
 
-  it('removes one exact file and an empty folder with recursion disabled', async () => {
-    const f = setup(),
-      path = `${f.root}/plan.json`;
-    await f.disk.removeFile(path);
-    expect(f.adapter.remove).toHaveBeenCalledExactlyOnceWith(path);
-    f.adapter.stat.mockResolvedValue({ type: 'folder', size: 0 });
-    await f.disk.removeEmptyFolder(f.root);
-    expect(f.adapter.rmdir).toHaveBeenCalledExactlyOnceWith(f.root, false);
-  });
-
-  it('uses FileManager.trashFile for one active attachment to honor deletion preferences', async () => {
-    const f = setup();
-    await f.vault.remove(f.file.path);
-    expect(f.trashActive).toHaveBeenCalledExactlyOnceWith(f.file);
-    expect(f.deleteActive).not.toHaveBeenCalled();
-  });
+  it.each(['system', 'local', 'none'] as const)(
+    'requests system trash regardless of the host deletion setting: %s',
+    async (trashOption) => {
+      const f = setup(trashOption);
+      await f.vault.remove(f.file.path);
+      expect(f.trashActive).toHaveBeenCalledExactlyOnceWith(f.file, true);
+      expect(f.deleteActive).not.toHaveBeenCalled();
+      expect(f.trashViaPreference).not.toHaveBeenCalled();
+      expect(f.activePaths.has(f.file.path)).toBe(false);
+    },
+  );
 
   it('propagates trash failures instead of falling back to permanent deletion', async () => {
-    const fixture = setup();
+    const fixture = setup('none');
     fixture.trashActive.mockRejectedValue(new Error('Trash unavailable'));
     await expect(fixture.vault.remove(fixture.file.path)).rejects.toThrow('Trash unavailable');
     expect(fixture.deleteActive).not.toHaveBeenCalled();
+    expect(fixture.trashViaPreference).not.toHaveBeenCalled();
+    expect(fixture.activePaths.has(fixture.file.path)).toBe(true);
   });
 
   it('blocks symbolic links before an active attachment reaches trash', async () => {
@@ -79,7 +90,7 @@ describe('native recovery deletion boundary', () => {
     expect(fixture.deleteActive).not.toHaveBeenCalled();
   });
 
-  it.each(['.trash/existing.png', `${RECOVERY_ROOT}/plan.json`, '.obsidian/config.json'])(
+  it.each(['.trash/existing.png', '.private-fixture/data.bin', '.obsidian/config.json'])(
     'blocks active-file removal in internal directories: %s',
     async (path) => {
       const f = setup();
@@ -88,44 +99,6 @@ describe('native recovery deletion boundary', () => {
       expect(f.trashActive).not.toHaveBeenCalled();
     },
   );
-
-  it.each(['note.md', '.trash/image.png', `${RECOVERY_ROOT}/../note.md`, RECOVERY_ROOT])(
-    'blocks deletion outside a single recovery object: %s',
-    async (path) => {
-      const f = setup();
-      await expect(f.disk.removeFile(path)).rejects.toThrow();
-      await expect(f.disk.removeEmptyFolder(path)).rejects.toThrow();
-      expect(f.adapter.remove).not.toHaveBeenCalled();
-      expect(f.adapter.rmdir).not.toHaveBeenCalled();
-    },
-  );
-
-  it.each(['root', 'parent', 'file'])('blocks symbolic links at the %s boundary', async (level) => {
-    const f = setup(),
-      path = `${f.root}/plan.json`;
-    const symbolicPath =
-      level === 'root'
-        ? '/fixture-vault'
-        : level === 'parent'
-          ? `/fixture-vault/${f.root}`
-          : `/fixture-vault/${path}`;
-    vi.mocked(lstat).mockImplementation(
-      async (target) =>
-        ({ isSymbolicLink: () => target === symbolicPath }) as Awaited<ReturnType<typeof lstat>>,
-    );
-    await expect(f.disk.removeFile(path)).rejects.toThrow(/ymlink|ymbolic/);
-    expect(f.adapter.remove).not.toHaveBeenCalled();
-  });
-
-  it('refuses nonempty folders and refuses to treat folders as files', async () => {
-    const f = setup();
-    f.adapter.stat.mockResolvedValue({ type: 'folder', size: 0 });
-    f.adapter.list.mockResolvedValue({ files: [`${f.root}/private.txt`], folders: [] });
-    await expect(f.disk.removeEmptyFolder(f.root)).rejects.toThrow('non-empty');
-    await expect(f.disk.removeFile(f.root)).rejects.toThrow('one explicit file');
-    expect(f.adapter.remove).not.toHaveBeenCalled();
-    expect(f.adapter.rmdir).not.toHaveBeenCalled();
-  });
 });
 
 describe('Obsidian attachment configuration and reference resolution', () => {

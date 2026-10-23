@@ -14,7 +14,9 @@ ROOT = Path(__file__).resolve().parents[1]
 LOCAL_DOCS = ROOT / "docs"
 EXCLUDED = {
     ".git", ".ssh", "node_modules", "dist", "build", "coverage", ".cache",
-    ".obsidian", ".attachment-atlas-recovery", ".trash", "dev-vault",
+    # Do not inspect private backup data left by older builds.
+    ".attachment-atlas-recovery",
+    ".obsidian", ".trash", "dev-vault",
     "release", "artifacts", "test-results", "playwright-report",
 }
 LINK = re.compile(r"!?\[[^\]\n]*\]\((<[^>\n]+>|[^\s)]+)(?:\s+\"[^\"]*\")?\)")

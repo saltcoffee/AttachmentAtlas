@@ -43,5 +43,5 @@ for (const [name, data] of Object.entries(fixtures)) {
 }
 const manifest = JSON.parse(await readFile('manifest.json', 'utf8'));
 console.log(
-  `Prepared ${root} with ${manifest.name} ${manifest.version}. Open it as an Obsidian vault and enable the local plugin manually. Existing fixture edits and recovery records were preserved.`,
+  `Prepared ${root} with ${manifest.name} ${manifest.version}. Open it as an Obsidian vault and enable the local plugin manually. Existing fixture edits were preserved.`,
 );

@@ -7,12 +7,10 @@ import {
   type WorkspaceLeaf,
 } from 'obsidian';
 import AttachmentAtlas from '../src/main';
-import { ConfirmPlanModal, RestoreModal } from '../src/ui/modals';
-import { CleanupModal } from '../src/ui/cleanup-modal';
+import { ConfirmPlanModal } from '../src/ui/modals';
 import { OrganizerView } from '../src/ui/organizer-view';
 import { AtlasSettingsTab } from '../src/ui/settings-tab';
-import { HistorySection } from '../src/ui/history-section';
-import { operationName, stateName, t } from '../src/ui/i18n';
+import { t } from '../src/ui/i18n';
 import { buildPlan } from '../src/application/plan';
 import { MemoryVault, PNG, snapshot } from './helpers';
 import { UiElement } from './ui-elements';
@@ -154,16 +152,7 @@ describe('localized plugin surfaces', () => {
     host.notices = [];
   });
   it.each([
-    [
-      'zh',
-      '扫描库内图片',
-      '扫描当前库',
-      '完全重复',
-      '保存设置',
-      '回收 1 张图片',
-      '取消',
-      '永久删除 1 条恢复记录',
-    ],
+    ['zh', '扫描库内图片', '扫描当前库', '完全重复', '保存设置', '回收 1 张图片', '取消'],
     [
       'en',
       'Scan vault images',
@@ -172,7 +161,6 @@ describe('localized plugin surfaces', () => {
       'Save settings',
       'Recycle 1 images',
       'Cancel',
-      'Permanently delete 1 recovery records',
     ],
     [
       'fr',
@@ -182,11 +170,10 @@ describe('localized plugin surfaces', () => {
       'Save settings',
       'Recycle 1 images',
       'Cancel',
-      'Permanently delete 1 recovery records',
     ],
   ])(
     'renders commands, settings, organizer and confirmation dialogs for %s',
-    async (language, command, scan, category, save, recycle, cancel, remove) => {
+    async (language, command, scan, category, save, recycle, cancel) => {
       host.language = language;
       const plugin = new AttachmentAtlas(app, {} as PluginManifest);
       await plugin.onload();
@@ -194,7 +181,6 @@ describe('localized plugin surfaces', () => {
       expect(host.commands.map((item) => item.id)).toEqual([
         'open-organizer',
         'scan-vault',
-        'open-history',
         'scan-attachment-folder',
       ]);
       expect(host.ribbon).toBe(
@@ -218,33 +204,17 @@ describe('localized plugin surfaces', () => {
       const content = elements(organizer.contentEl).contents();
       expect(content).toContain(language === 'zh' ? '重新扫描' : 'Scan again');
       expect(content).toContain(category);
+      expect(content).not.toContain(language === 'zh' ? '操作历史' : 'History');
       expect(content).toContain('Scan vault.png');
 
       const plan = buildPlan(result, ['b.png'], 'Scan vault.png');
-      const history = new UiElement();
-      new HistorySection().render(history as unknown as HTMLElement, {
-        entries: [
-          {
-            id: plan.id,
-            createdAt: plan.createdAt,
-            kind: plan.kind,
-            state: 'completed',
-            storageBytes: 10,
-          },
-        ],
-        busy: false,
-        previewCleanup: vi.fn(),
-        previewRestore: vi.fn(),
-      });
-      expect(history.contents()).toContain(
-        language === 'zh' ? '清空恢复区' : 'Empty recovery area',
-      );
-      expect(history.contents()).toContain(language === 'zh' ? '已完成' : 'Completed');
-      expect(history.contents()).not.toContain('merge-exact');
       const confirm = vi.fn().mockResolvedValue(undefined);
       const modal = new ConfirmPlanModal(app, plan, confirm);
       modal.onOpen();
       const nodes = elements(modal.contentEl).all();
+      expect(elements(modal.contentEl).contents()).toContain(
+        language === 'zh' ? '废纸篓' : 'system trash',
+      );
       const button = nodes.find((node) => node.tag === 'button' && node.text === recycle)!;
       const consent = nodes.find((node) => node.attrs.type === 'checkbox')!;
       expect(button.disabled).toBe(true);
@@ -257,35 +227,6 @@ describe('localized plugin surfaces', () => {
       expect(confirm).toHaveBeenCalledOnce();
       expect(nodes.some((node) => node.text === cancel)).toBe(true);
 
-      const restore = new RestoreModal(app, plan, vi.fn().mockResolvedValue(undefined));
-      restore.onOpen();
-      expect(elements(restore.contentEl).contents()).toContain(
-        language === 'zh' ? '检查冲突并恢复' : 'Check conflicts and restore',
-      );
-      const cleanup = new CleanupModal(
-        app,
-        {
-          totalBytes: 10,
-          records: [
-            {
-              id: plan.id,
-              createdAt: plan.createdAt,
-              kind: plan.kind,
-              resuming: false,
-              folder: 'recovery-folder',
-              marker: 'marker',
-              size: 10,
-              paths: [],
-            },
-          ],
-        },
-        vi.fn(),
-      );
-      cleanup.onOpen();
-      const cleanupButton = elements(cleanup.contentEl)
-        .all()
-        .find((node) => node.text === remove)!;
-      expect(cleanupButton.disabled).toBe(true);
       expect(vault.files).toEqual(before);
       expect(vault.removed).toEqual([]);
       plugin.onunload();
@@ -347,16 +288,11 @@ describe('localized plugin surfaces', () => {
     expect(plugin.settings).toEqual(saved);
     expect(host.notices).not.toContain('Attachment Atlas settings saved.');
   });
-  it('reads changes from Obsidian and translates states without changing stored state strings', () => {
+  it('reads language changes from Obsidian', () => {
     host.language = 'zh-TW';
-    expect(t('History')).toBe('操作历史');
-    expect(operationName('merge-exact')).toBe('完全重复图片合并');
-    expect(stateName('writing:Scan vault.png')).toBe('正在更新引用：Scan vault.png');
-    expect(stateName('completed')).toBe('已完成');
+    expect(t('Scan vault')).toBe('扫描当前库');
     host.language = 'de';
-    expect(t('History')).toBe('History');
-    expect(stateName('completed')).toBe('Completed');
-    expect(stateName('unknown')).toBe('Unknown state: unknown');
+    expect(t('Scan vault')).toBe('Scan vault');
   });
   it('explains incomplete coverage and links directly to the blocking issues', async () => {
     host.language = 'zh';
@@ -438,16 +374,5 @@ describe('localized plugin surfaces', () => {
     plugin.snapshot = await snapshot(vault);
     view.render();
     expect(root.all().find((node) => node.text === '预览回收（0）')?.disabled).toBe(true);
-  });
-  it('explains unfinished recovery records before offering another write operation', async () => {
-    host.language = 'zh';
-    const plugin = new AttachmentAtlas(app, {} as PluginManifest);
-    plugin.snapshot = await snapshot(new MemoryVault({ 'a.png': PNG, 'b.png': PNG }));
-    plugin.history = [{ id: crypto.randomUUID(), state: 'needsRecovery' }];
-    const view = new OrganizerView({ app } as unknown as WorkspaceLeaf, plugin);
-    view.render();
-    const root = elements(view.contentEl);
-    expect(root.contents()).toContain('请先在“操作历史”中处理未完成的恢复操作');
-    expect(root.all().find((node) => node.text === '预览合并（1）')?.disabled).toBe(true);
   });
 });

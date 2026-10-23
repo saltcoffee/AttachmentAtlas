@@ -30,7 +30,7 @@ export class ConfirmPlanModal extends Modal {
     });
     el.createEl('p', {
       text: t(
-        'The listed images will be kept in .attachment-atlas-recovery/. Their original paths are removed only after recovery copies and reference changes are verified. They continue to use recovery storage until restored or permanently cleared. Pause edits on other devices during maintenance.',
+        'The listed images will be moved to the system trash. If system trash is unavailable, Obsidian uses the vault’s .trash/ folder. Updated references are not automatically restored. Pause edits on other devices during cleanup.',
       ),
     });
     if (this.plan.keep[0])
@@ -56,7 +56,9 @@ export class ConfirmPlanModal extends Modal {
     }
     const label = el.createEl('label', { cls: 'atlas-consent' });
     const consent = label.createEl('input', { type: 'checkbox' });
-    label.createSpan({ text: t('I reviewed the exact paths and recovery storage.') });
+    label.createSpan({
+      text: t('I reviewed the file paths and understand how deleted images can be restored.'),
+    });
     const actions = el.createDiv({ cls: 'atlas-actions' });
     const cancel = actions.createEl('button', { text: t('Cancel') });
     cancel.onclick = () => this.close();
@@ -73,45 +75,6 @@ export class ConfirmPlanModal extends Modal {
       button.disabled = true;
       this.close();
       void this.confirm().catch((error) => new Notice(errorText(error)));
-    };
-  }
-  onClose(): void {
-    this.contentEl.empty();
-  }
-}
-export class RestoreModal extends Modal {
-  constructor(
-    app: App,
-    private plan: Plan,
-    private restore: () => Promise<void>,
-  ) {
-    super(app);
-  }
-  onOpen(): void {
-    this.contentEl.createEl('h2', { text: t('Review recovery') });
-    this.contentEl.createEl('p', {
-      text: t(
-        'Original images are restored before references. Any later document edits or conflicting paths stop recovery without overwriting them.',
-      ),
-    });
-    this.contentEl.createEl('p', {
-      text: t(
-        'After all images and references are restored and verified, this operation’s recovery copies and history are permanently removed. Conflicts or incomplete restoration keep the recovery data.',
-      ),
-    });
-    const list = this.contentEl.createEl('ul');
-    this.plan.retire.forEach((image) =>
-      list.createEl('li', { text: t('Restore image: {path}', { path: image.path }) }),
-    );
-    this.plan.documents.forEach((doc) =>
-      list.createEl('li', { text: t('Restore references: {path}', { path: doc.path }) }),
-    );
-    const cancel = this.contentEl.createEl('button', { text: t('Cancel') });
-    cancel.onclick = () => this.close();
-    const button = this.contentEl.createEl('button', { text: t('Check conflicts and restore') });
-    button.onclick = () => {
-      this.close();
-      void this.restore().catch((error) => new Notice(errorText(error)));
     };
   }
   onClose(): void {

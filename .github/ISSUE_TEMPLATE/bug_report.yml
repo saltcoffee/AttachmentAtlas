@@ -7,7 +7,7 @@ body:
       value: |
         The project has a 0.1.0 development build and no stable plugin release.
         Documentation defects are welcome. Use SECURITY.md for sensitive issues.
-        Never upload private vaults or complete recovery archives.
+        Never upload private vaults or complete backups.
   - type: input
     id: versions
     attributes:

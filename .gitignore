@@ -22,9 +22,10 @@ __pycache__/
 # Local product plans, architecture, development notes, and acceptance records
 /docs/
 
-# Local vaults, recovery data, editor settings, and secrets
+# Local vaults, editor settings, and secrets
 /dev-vault/
 .obsidian/
+# Retired backup directory: keep any existing private data out of Git.
 .attachment-atlas-recovery/
 .trash/
 .env

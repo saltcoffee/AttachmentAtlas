@@ -63,8 +63,3 @@
 .atlas-view input[type='search'] {
   width: 100%;
 }
-.atlas-cleanup-files {
-  max-height: 16rem;
-  overflow: auto;
-  overflow-wrap: anywhere;
-}

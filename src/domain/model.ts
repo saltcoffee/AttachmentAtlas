@@ -10,10 +10,8 @@ export interface Settings {
   preferredFolder: string;
 }
 export const DEFAULT_SETTINGS: Settings = { scope: '', protectedPaths: [], preferredFolder: '' };
-export const DAY = 86_400_000;
 export const MAX_IMAGE = 64 * 1024 * 1024;
 export const MAX_SOURCE = 4 * 1024 * 1024;
-export const RECOVERY_ROOT = '.attachment-atlas-recovery';
 export interface Media extends FileEntry {
   width?: number;
   height?: number;
@@ -60,8 +58,6 @@ export interface DocumentChange {
   after: string;
 }
 export interface Plan {
-  id: string;
-  createdAt: number;
   revision: number;
   kind: 'merge-exact' | 'recycle-unreferenced';
   retire: { path: string; digest: string; size: number }[];
@@ -75,8 +71,7 @@ export interface VaultPort {
   readText(path: string): Promise<string>;
   readBinary(path: string): Promise<ArrayBuffer>;
   process(path: string, transform: (text: string) => string): Promise<void>;
-  createBinary(path: string, data: ArrayBuffer): Promise<void>;
-  /** Remove one active file only after its durable recovery copy has been verified. */
+  /** Recycle one active attachment via system trash, with Obsidian's local-trash fallback. */
   remove(path: string): Promise<void>;
   exists(path: string): Promise<boolean>;
 }

@@ -24,9 +24,3 @@ export function diagnostic(language: string, text: Text): string {
     );
   });
 }
-export function dateText(language: string, timestamp: number): string {
-  return new Date(timestamp).toLocaleString(localeFor(language));
-}
-export function numberText(language: string, value: number): string {
-  return value.toLocaleString(localeFor(language));
-}
