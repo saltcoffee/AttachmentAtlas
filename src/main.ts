@@ -158,8 +158,7 @@ export default class AttachmentAtlas extends Plugin {
       await this.operations.execute(plan, snapshot, this.controller.signal, (message) =>
         this.progress(message),
       );
-      this.status =
-        'Completed. Restore images from the system trash or the vault’s .trash/ folder.';
+      this.status = 'Completed. Images were deleted according to Obsidian’s deleted-file setting.';
     } catch (error) {
       this.fail(error);
       this.status = 'Cleanup stopped. Applied changes are kept. Scan again before continuing.';

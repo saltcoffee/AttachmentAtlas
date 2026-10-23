@@ -12,13 +12,13 @@ Include a minimal synthetic reproduction, affected version, Obsidian version, op
 
 ## Suspected data loss
 
-Stop new Attachment Atlas write operations. Preserve the vault and relevant trash/backup data before further cleanup. Images are sent to system trash through Obsidian's vault API, which falls back to the vault's `.trash/` folder if system trash is unavailable. The plugin uses trash even when Obsidian is configured for permanent deletion. Restore deleted images from that location; the plugin does not retain image backups, note snapshots, or operation history, and does not undo reference edits.
+Stop new Attachment Atlas write operations. Preserve the vault and relevant trash/backup data before further cleanup. Image deletion follows Obsidian's **Deleted files** setting: system trash, the vault's `.trash/` folder, or permanent deletion. Restore images from the configured trash location if available; permanently deleted images cannot be recovered from trash. The plugin does not retain image backups, note snapshots, or operation history, and does not undo reference edits.
 
 A failed or interrupted operation can leave some reference updates or image deletions applied. Preserve the current files, review the error, and scan again before continuing. The plugin cannot provide cross-device locking or recover files that are no longer available in trash or external backups.
 
 ## Scope
 
-The plugin enumerates vault file paths for complete reference checks. Its only direct Node.js filesystem operation is `lstat()` on the vault root and accessed path components to reject symbolic links; file contents are accessed through Obsidian APIs. Recycling an active attachment uses `Vault.trash(file, true)` after verifying references and the image content, independent of the user's permanent-deletion preference. The plugin never empties either trash location or falls back to permanent deletion if recycling fails.
+The plugin enumerates vault file paths for complete reference checks. Its only direct Node.js filesystem operation is `lstat()` on the vault root and accessed path components to reject symbolic links; file contents are accessed through Obsidian APIs. Deleting an active attachment uses `FileManager.trashFile()` after verifying references and the image content, following the user's deletion preference. The plugin never empties either trash location or adds a deletion fallback if the operation fails.
 
 Relevant reports include unauthorized deletion, reference misdirection, silent overwrites, path traversal, access outside the vault, unsafe image decoding, and unexpected network access. Ordinary feature requests belong in the feature template.
 

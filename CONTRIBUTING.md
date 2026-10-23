@@ -29,7 +29,7 @@ Dependabot checks weekly and groups minor and patch version updates into one ope
 
 `npm run dev` watches plugin sources. After changing the Worker source, restart the development build. Open the generated `dev-vault/` folder as a vault in Obsidian and enable Attachment Atlas to check the native interface. The generator preserves existing fixture edits while refreshing the plugin files.
 
-In that test vault, verify duplicate merging, reference updates, and unreferenced-image recycling with Obsidian configured for system trash, vault trash, and permanent deletion. In all three cases, verify that the plugin requests system trash; when system trash is unavailable, Obsidian falls back to vault trash. Verify that previews do not write files, that cleanup creates no plugin backup directory, and that failures or cancellation stop remaining work while preserving applied changes. Automated tests do not replace real-app checks of confirmation, keyboard interaction, and application restart.
+In that test vault, verify duplicate merging, reference updates, and unreferenced-image cleanup with Obsidian configured for system trash, vault trash, and permanent deletion. Verify that each setting is respected and that the confirmation explains permanent deletion. Verify that previews do not write files, that cleanup creates no plugin backup directory, and that failures or cancellation stop remaining work while preserving applied changes. Automated tests do not replace real-app checks of confirmation, keyboard interaction, and application restart.
 
 For documentation only:
 
@@ -49,7 +49,7 @@ The documentation check validates public Markdown for UTF-8, final newlines, tra
 - Use precise source patches for links; never globally replace attachment filenames.
 - Keep scanning read-only with respect to notes and attachments.
 - Require explicit plans and execution-time checks before updating references or recycling images.
-- Update and verify every planned reference before recycling any image. Use `Vault.trash(file, true)` for one explicit attachment at a time to request system trash with Obsidian's local-trash fallback. Do not use `FileManager.trashFile()`, which can permanently delete files depending on the host setting. Never fall back to permanent deletion or empty the user's trash.
+- Update and verify every planned reference before deleting any image. Use `FileManager.trashFile()` for one explicit attachment at a time to respect Obsidian's deletion preference. Explain permanent deletion in the confirmation, propagate deletion failures, and never add a deletion fallback or empty the user's trash. Do not disable `obsidianmd/prefer-file-manager-trash-file`.
 - Keep already applied changes if an operation fails or is cancelled, stop remaining work, and require a fresh scan. Never overwrite later user edits or recreate recycled files.
 - Keep the plugin free of image backups, note snapshots, operation journals, runtime dependency downloads, and telemetry.
 

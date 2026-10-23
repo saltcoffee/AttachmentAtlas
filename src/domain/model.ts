@@ -71,7 +71,7 @@ export interface VaultPort {
   readText(path: string): Promise<string>;
   readBinary(path: string): Promise<ArrayBuffer>;
   process(path: string, transform: (text: string) => string): Promise<void>;
-  /** Recycle one active attachment via system trash, with Obsidian's local-trash fallback. */
+  /** Delete one active attachment according to Obsidian's deletion preference. */
   remove(path: string): Promise<void>;
   exists(path: string): Promise<boolean>;
 }

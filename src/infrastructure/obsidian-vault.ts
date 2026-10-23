@@ -76,8 +76,6 @@ export class ObsidianVault implements VaultPort {
   async remove(path: string): Promise<void> {
     assert(active(path), 'Only active attachment paths can be removed.');
     await this.guard(path);
-    // FileManager.trashFile permanently deletes when the host preference is "none".
-    // eslint-disable-next-line obsidianmd/prefer-file-manager-trash-file -- Cleanup must use trash even when the host preference is permanent deletion.
-    await this.app.vault.trash(this.file(path), true);
+    await this.app.fileManager.trashFile(this.file(path));
   }
 }

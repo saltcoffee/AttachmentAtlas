@@ -39,7 +39,7 @@ To limit image scanning or protect folders, open **Settings → Attachment Atlas
 ## Recycling
 
 - **Reference coverage:** supported Markdown and Canvas references can be updated during merges. Excalidraw drawings are scanned without modification, and their images are protected. Incomplete reference checks block merging and recycling; inspect **Needs review**.
-- **Trash and restoration:** images are sent to system trash, with Obsidian falling back to the vault’s `.trash/` folder if needed. This also applies when Obsidian is set to permanently delete files. Restore images from the trash if needed; reference changes made during a merge are not automatically undone.
+- **Deletion and restoration:** images follow **Settings → Files and links → Deleted files**: system trash, the vault’s `.trash/` folder, or permanent deletion. Choose a trash option if you want to restore images later; permanently deleted images cannot be recovered from trash. Reference changes made during a merge are not automatically undone.
 
 ## Support development
 
