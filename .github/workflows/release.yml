@@ -31,6 +31,10 @@ jobs:
         with:
           node-version: '22'
           cache: npm
+      - name: Use project npm version
+        run: |
+          atlas_package_manager=$(node -p "require('./package.json').packageManager")
+          npm install --global "$atlas_package_manager"
       - name: Validate version and prepare release notes
         id: prepare
         run: |

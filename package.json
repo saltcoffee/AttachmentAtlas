@@ -4,6 +4,7 @@
   "private": true,
   "description": "Reference-aware image cleanup for Obsidian.",
   "type": "module",
+  "packageManager": "npm@10.9.9",
   "main": "main.js",
   "author": "gua",
   "license": "MIT",

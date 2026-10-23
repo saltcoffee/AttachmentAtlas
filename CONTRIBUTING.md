@@ -13,14 +13,17 @@ Use the issue templates for reproducible bugs and feature proposals. For sensiti
 
 ## Development status
 
-Use Node.js 22+ and npm for plugin development; Python 3.10+ is needed for documentation checks:
+Use Node.js 22 and npm 10.9.9 for plugin development; Python 3.10+ is needed for documentation checks. The npm version is recorded in `package.json` and used by both CI and release builds:
 
 ```sh
+npm install --global npm@10.9.9
 npm ci
 npm run check
 npm run package
 node scripts/dev-vault.mjs
 ```
+
+Use the project npm version when updating dependencies and commit the resulting `package-lock.json` with `package.json`. Validate installation with `npm ci` in a clean checkout before pushing dependency changes.
 
 `npm run dev` watches plugin sources. After changing the Worker source, restart the development build. Open the generated `dev-vault/` folder as a vault in Obsidian and enable Attachment Atlas to check the native interface. The generator preserves existing fixture edits and recovery records while refreshing the plugin files.
 
