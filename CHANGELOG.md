@@ -4,6 +4,19 @@ Notable user-facing changes are recorded here. Version entries are used as relea
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-23
+
+### Changed
+
+- Image cleanup sends images to system trash without creating plugin backups. Obsidian falls back to the vault's `.trash/` folder if system trash is unavailable. Restore images from the trash; rewritten references are not automatically restored.
+- Removes plugin-managed recovery storage, operation history, restore dialogs, and recovery-data cleanup. Existing recovery folders are left untouched.
+- Keeps previews, reference verification, and per-image checks. Interrupted operations retain applied changes and stop remaining deletions; scan again to continue.
+- Simplifies the English and Chinese READMEs around installation, core workflows, and recycling behavior.
+
+### Fixed
+
+- Recycling always uses trash even when Obsidian's deleted-file setting is permanent deletion. A failed trash operation stops cleanup without permanently deleting the image.
+
 ## [0.1.1]
 
 ### Changed
@@ -28,7 +41,7 @@ Notable user-facing changes are recorded here. Version entries are used as relea
 - Read-only reference indexing for compressed/uncompressed Excalidraw Markdown drawings and standalone scenes; drawing-used images are protected individually and recommended as retained copies.
 - Visible reasons for disabled cleanup actions, a shortcut to blocking issues, and a “Potentially unreferenced” category when reference coverage is incomplete.
 - Checksummed recovery records, compensation, conflict-safe restore, and local operation history.
-- A single `.attachment-atlas-recovery/` area for recycled images, note snapshots, and journals; no use of Obsidian trash. Successful verified restoration removes the operation's recovery data automatically.
+- Historical behavior, removed in 0.1.2: a single `.attachment-atlas-recovery/` area for recycled images, note snapshots, and journals; no use of Obsidian trash. Successful verified restoration removes the operation's recovery data automatically.
 - Recovery storage totals, per-record and selected-record cleanup, an empty-area preview, explicit permanent-deletion consent, and resumable interrupted cleanup. Unfinished or damaged records are protected.
 - Native organizer view, protected paths, whole-vault reference coverage, and inline fingerprint Worker.
 - TypeScript, lint, fault-injection tests, production bundling, third-party notices, local install packaging, and CI.

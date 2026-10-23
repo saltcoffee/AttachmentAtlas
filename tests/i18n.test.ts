@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 import { zh } from '../src/i18n/zh';
-import { dateText, diagnostic, localeFor, numberText, translate } from '../src/i18n';
+import { diagnostic, localeFor, translate } from '../src/i18n';
 import {
   AtlasError,
   asMessage,
@@ -15,9 +15,6 @@ import {
 import { digest, DEFAULT_SETTINGS } from '../src/domain/model';
 import { scan } from '../src/application/scan';
 import { settingsFrom } from '../src/infrastructure/settings';
-import { RecoveryStore } from '../src/infrastructure/recovery-store';
-import { MemoryDisk } from './helpers';
-import { recoveryDirectory } from '../src/domain/recovery';
 import { MemoryVault, PNG } from './helpers';
 
 describe('Obsidian language selection', () => {
@@ -36,12 +33,6 @@ describe('Obsidian language selection', () => {
       expect(translate(language, 'Recycle {count} images', { count: 3 })).toBe('Recycle 3 images');
     },
   );
-  it('formats dates and numbers using the selected plugin language', () => {
-    const timestamp = Date.UTC(2026, 9, 23, 12);
-    expect(dateText('zh', timestamp)).toBe(new Date(timestamp).toLocaleString('zh-CN'));
-    expect(dateText('fr', timestamp)).toBe(new Date(timestamp).toLocaleString('en-US'));
-    expect(numberText('de', 12345.6)).toBe((12345.6).toLocaleString('en-US'));
-  });
 });
 
 describe('message boundaries and catalogue coverage', () => {
@@ -81,22 +72,6 @@ describe('message boundaries and catalogue coverage', () => {
       );
     }
   });
-  it.each(['invalid JSON', '{}'])(
-    'localizes corrupt recovery records without exposing validator internals: %s',
-    async (contents) => {
-      const disk = new MemoryDisk();
-      const root = recoveryDirectory(crypto.randomUUID());
-      await disk.mkdir('.attachment-atlas-recovery');
-      await disk.mkdir(root);
-      await disk.writeNew(`${root}/plan.json`, contents);
-      const [entry] = await new RecoveryStore(disk).history();
-      expect(entry?.state).toBe('needsRecovery');
-      const detail = diagnostic('zh', entry!.error!);
-      expect(detail).toContain('请保留恢复文件以便手动检查');
-      expect(detail).not.toContain('expected');
-      expect(disk.removed).toEqual([]);
-    },
-  );
   it('keeps the same placeholders in both languages and uses English for every other language', () => {
     const placeholders = (text: string) =>
       [...text.matchAll(/\{(\w+)\}/g)].map((match) => match[1]).sort();
@@ -183,7 +158,6 @@ describe('message boundaries and catalogue coverage', () => {
     };
     walk(root);
     templates.delete('');
-    expect(templates.size).toBeGreaterThan(250);
     expect([...templates].filter((template) => !Object.hasOwn(zh, template))).toEqual([]);
   });
   it('localizes actual scan blockers, image protection, and progress without mutating vault data', async () => {

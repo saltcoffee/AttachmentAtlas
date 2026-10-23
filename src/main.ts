@@ -1,4 +1,4 @@
-import { t, problem, formatNumber } from './ui/i18n';
+import { t, problem } from './ui/i18n';
 import { Notice, Plugin } from 'obsidian';
 import { DEFAULT_SETTINGS, type Plan, type Settings, type Snapshot } from './domain/model';
 import { scan } from './application/scan';
@@ -6,20 +6,14 @@ import { buildPlan } from './application/plan';
 import { OperationService } from './application/execute';
 import { ObsidianVault } from './infrastructure/obsidian-vault';
 import { HashClient } from './infrastructure/hash-client';
-import { RecoveryStore } from './infrastructure/recovery-store';
-import { finishedRecoveryState, type HistoryEntry, type CleanupPreview } from './domain/recovery';
-import { WriteLock } from './application/write-lock';
-import { RecoveryCleanupService } from './application/cleanup-recovery';
-import { CleanupModal, cleanupDialogData } from './ui/cleanup-modal';
 import { loadState, settingsFrom } from './infrastructure/settings';
 import { OrganizerView, VIEW_TYPE } from './ui/organizer-view';
 import { AtlasSettingsTab } from './ui/settings-tab';
-import { ConfirmPlanModal, RestoreModal } from './ui/modals';
-import { errorDetail, message, type Text } from './domain/messages';
+import { ConfirmPlanModal } from './ui/modals';
+import { errorDetail, type Text } from './domain/messages';
 export default class AttachmentAtlas extends Plugin {
   settings: Settings = structuredClone(DEFAULT_SETTINGS);
   snapshot: Snapshot | null = null;
-  history: HistoryEntry[] = [];
   status: Text = 'Ready to scan. All processing stays inside this vault.';
   lastError: Text = '';
   busy = false;
@@ -27,14 +21,9 @@ export default class AttachmentAtlas extends Plugin {
   private controller: AbortController | null = null;
   private hashes = new HashClient();
   private vaultPort!: ObsidianVault;
-  private recovery!: RecoveryStore;
   private operations!: OperationService;
-  private cleanup!: RecoveryCleanupService;
-  private cleanupModal: CleanupModal | null = null;
-  private unloaded = false;
   private refreshTimer: number | null = null;
   async onload(): Promise<void> {
-    this.unloaded = false;
     const loaded = loadState(await this.loadData());
     this.settings = loaded.settings;
     if (loaded.reset)
@@ -42,10 +31,7 @@ export default class AttachmentAtlas extends Plugin {
         t('Attachment Atlas reset invalid settings. Review your image scope and protected paths.'),
       );
     this.vaultPort = new ObsidianVault(this.app);
-    this.recovery = new RecoveryStore(this.vaultPort.disk());
-    const writes = new WriteLock();
-    this.operations = new OperationService(this.vaultPort, this.recovery, this.hashes.hash, writes);
-    this.cleanup = new RecoveryCleanupService(this.recovery, writes);
+    this.operations = new OperationService(this.vaultPort, this.hashes.hash);
     this.registerView(VIEW_TYPE, (leaf) => new OrganizerView(leaf, this));
     this.addSettingTab(new AtlasSettingsTab(this.app, this));
     this.addRibbonIcon('images', t('Open Attachment Atlas'), () => {
@@ -66,13 +52,6 @@ export default class AttachmentAtlas extends Plugin {
       },
     });
     this.addCommand({
-      id: 'open-history',
-      name: t('Open operation history'),
-      callback: () => {
-        void this.open().then((view) => view.showHistory());
-      },
-    });
-    this.addCommand({
       id: 'scan-attachment-folder',
       name: t('Scan current attachment folder'),
       callback: () => {
@@ -85,15 +64,9 @@ export default class AttachmentAtlas extends Plugin {
     this.registerEvent(this.app.vault.on('modify', () => this.invalidate()));
     this.registerEvent(this.app.vault.on('delete', () => this.invalidate()));
     this.registerEvent(this.app.vault.on('rename', () => this.invalidate()));
-    this.app.workspace.onLayoutReady(() => {
-      void this.refreshHistory().catch((error) => this.fail(error));
-    });
   }
   onunload(): void {
-    this.unloaded = true;
     this.cancel();
-    this.cleanupModal?.close();
-    this.cleanupModal = null;
     this.hashes.dispose();
     if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
   }
@@ -128,7 +101,7 @@ export default class AttachmentAtlas extends Plugin {
   }
   private fail(error: unknown): void {
     this.lastError = errorDetail(error);
-    this.status = 'Stopped. Review the error and operation history.';
+    this.status = 'Stopped. Review the error and scan again.';
     new Notice(problem(this.lastError), 8000);
     this.refresh();
   }
@@ -150,7 +123,6 @@ export default class AttachmentAtlas extends Plugin {
       if (revision !== this.revision) throw new Error('Vault changed during scanning. Scan again.');
       this.snapshot = result;
       this.status = 'Scan complete.';
-      await this.refreshHistory();
     } catch (error) {
       this.fail(error);
     } finally {
@@ -187,117 +159,14 @@ export default class AttachmentAtlas extends Plugin {
         this.progress(message),
       );
       this.status =
-        'Completed. Recycled images are retained in .attachment-atlas-recovery/ until restored or permanently cleared.';
+        'Completed. Restore images from the system trash or the vault’s .trash/ folder.';
     } catch (error) {
       this.fail(error);
+      this.status = 'Cleanup stopped. Applied changes are kept. Scan again before continuing.';
     } finally {
       this.snapshot = null;
       this.busy = false;
       this.controller = null;
-      await this.refreshHistory();
-      this.refresh();
-    }
-  }
-  previewRestore(id: string): void {
-    void this.recovery
-      .loadPlan(id)
-      .then((plan) => this.showRestore(plan))
-      .catch((error) => this.fail(error));
-  }
-  private showRestore(plan: Plan): void {
-    new RestoreModal(this.app, plan, async () => {
-      if (this.busy) return;
-      this.busy = true;
-      this.lastError = '';
-      this.status = 'Restoring images and references…';
-      this.controller = new AbortController();
-      this.refresh();
-      try {
-        const result = await this.operations.restore(plan, this.controller.signal, (message) =>
-          this.progress(message),
-        );
-        this.status = result.cleanupError
-          ? 'Images and references restored. Recovery data cleanup did not finish; review History to continue.'
-          : 'Recovery completed. The restored operation’s recovery data has been removed.';
-        if (result.cleanupError) {
-          this.lastError = result.cleanupError;
-          new Notice(t(this.status), 8000);
-        }
-      } catch (error) {
-        this.fail(error);
-      } finally {
-        this.snapshot = null;
-        this.busy = false;
-        this.controller = null;
-        await this.refreshHistory();
-        this.refresh();
-      }
-    }).open();
-  }
-  private async refreshHistory(): Promise<void> {
-    this.history = await this.recovery.history();
-    if (this.history.some((entry) => !finishedRecoveryState(entry.state)))
-      new Notice(
-        t(
-          'Attachment Atlas has unfinished recovery or cleanup records. Review History before new write operations.',
-        ),
-        10000,
-      );
-    this.refresh();
-  }
-  async previewCleanup(ids: readonly string[]): Promise<void> {
-    if (this.busy || this.unloaded) return;
-    this.busy = true;
-    this.lastError = '';
-    this.controller = new AbortController();
-    this.refresh();
-    let preview: CleanupPreview | undefined;
-    try {
-      preview = await this.cleanup.preview(ids, this.controller.signal, (message) =>
-        this.progress(message),
-      );
-      this.status = 'Recovery cleanup preview ready.';
-    } catch (error) {
-      this.fail(error);
-    } finally {
-      this.busy = false;
-      this.controller = null;
-      this.refresh();
-    }
-    if (preview && !this.unloaded) {
-      const confirmed = preview;
-      this.cleanupModal?.close();
-      this.cleanupModal = new CleanupModal(this.app, cleanupDialogData(confirmed), () =>
-        this.cleanRecovery(confirmed),
-      );
-      this.cleanupModal.open();
-    }
-  }
-  private async cleanRecovery(preview: CleanupPreview): Promise<void> {
-    if (this.busy || this.unloaded) return;
-    this.busy = true;
-    this.lastError = '';
-    this.controller = new AbortController();
-    this.refresh();
-    try {
-      const result = await this.cleanup.execute(preview, this.controller.signal, (message) =>
-        this.progress(message),
-      );
-      this.status = message(
-        'Permanently cleared {count} records from .attachment-atlas-recovery/ ({bytes} bytes).',
-        { count: result.removedRecords, bytes: formatNumber(result.releasedBytes) },
-      );
-      new Notice(t(this.status));
-    } catch (error) {
-      this.fail(error);
-    } finally {
-      this.busy = false;
-      this.controller = null;
-      try {
-        await this.refreshHistory();
-      } catch (error) {
-        this.fail(error);
-      }
       this.refresh();
     }
   }

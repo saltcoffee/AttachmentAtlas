@@ -8,19 +8,17 @@ For vulnerabilities, unintended file access, or a reproducible risk of data loss
 
 If no private reporting entry is available, open a public issue requesting a private contact channel without publishing sensitive reproduction details. No email address or external reporting service is established yet.
 
-Include a minimal synthetic reproduction, affected version, Obsidian version, operating system, expected behavior, and the observed result. Do not upload a private vault, real note content, authentication data, or a full recovery archive.
+Include a minimal synthetic reproduction, affected version, Obsidian version, operating system, expected behavior, and the observed result. Do not upload a private vault, real note content, authentication data, or a full backup.
 
 ## Suspected data loss
 
-Stop new Attachment Atlas write operations. Preserve the vault, `.attachment-atlas-recovery/`, and relevant trash/backup data before further cleanup. Recovery records may contain complete notes and original image bytes; treat them as private data. Do not permanently clear them while investigating.
+Stop new Attachment Atlas write operations. Preserve the vault and relevant trash/backup data before further cleanup. Images are sent to system trash through Obsidian's vault API, which falls back to the vault's `.trash/` folder if system trash is unavailable. The plugin uses trash even when Obsidian is configured for permanent deletion. Restore deleted images from that location; the plugin does not retain image backups, note snapshots, or operation history, and does not undo reference edits.
 
-Recovery checks content before restoring and reports conflicts instead of overwriting later edits. A fully verified restoration automatically removes that operation's recovery data, so preserve a separate copy first when investigating an incident. The plugin cannot provide cross-device locking or recover from missing/corrupted copies without sufficient surviving data.
+A failed or interrupted operation can leave some reference updates or image deletions applied. Preserve the current files, review the error, and scan again before continuing. The plugin cannot provide cross-device locking or recover files that are no longer available in trash or external backups.
 
 ## Scope
 
-The plugin enumerates vault file paths for complete reference checks. Its only direct Node.js filesystem operation is `lstat()` on the vault root and accessed path components to reject symbolic links; file contents are accessed through Obsidian APIs. Removing an active attachment uses `FileManager.trashFile()` after verifying the recovery copy, honoring the user's deletion preference. Recovery cleanup removes explicit plugin-owned files individually and only removes empty operation directories.
-
-Clipboard access is write-only and requires clicking **Copy recovery folder path** in History. The copied text contains only the displayed vault-relative recovery folder path. The plugin never reads the clipboard or sends the path over the network.
+The plugin enumerates vault file paths for complete reference checks. Its only direct Node.js filesystem operation is `lstat()` on the vault root and accessed path components to reject symbolic links; file contents are accessed through Obsidian APIs. Recycling an active attachment uses `Vault.trash(file, true)` after verifying references and the image content, independent of the user's permanent-deletion preference. The plugin never empties either trash location or falls back to permanent deletion if recycling fails.
 
 Relevant reports include unauthorized deletion, reference misdirection, silent overwrites, path traversal, access outside the vault, unsafe image decoding, and unexpected network access. Ordinary feature requests belong in the feature template.
 

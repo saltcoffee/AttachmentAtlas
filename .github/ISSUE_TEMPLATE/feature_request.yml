@@ -13,7 +13,7 @@ body:
     id: behavior
     attributes:
       label: Proposed behavior
-      description: Include affected files, reference formats, and desired preview or recovery behavior.
+      description: Include affected files, reference formats, and desired preview or recycling behavior.
     validations:
       required: true
   - type: textarea

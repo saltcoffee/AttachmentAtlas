@@ -2,8 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { digest } from '../src/domain/model';
 import { buildPlan } from '../src/application/plan';
 import { OperationService } from '../src/application/execute';
-import { RecoveryStore } from '../src/infrastructure/recovery-store';
-import { MemoryDisk, MemoryVault, PNG, snapshot } from './helpers';
+import { MemoryVault, PNG, snapshot } from './helpers';
 
 describe('referenced-image recycling safety', () => {
   it.each([
@@ -17,7 +16,7 @@ describe('referenced-image recycling safety', () => {
       'map.canvas',
       '{"nodes":[{"id":"t","type":"text","text":"[![alt](a&#38;b.png)](https://example.com)"}]}',
     ],
-  ])('protects %s referenced by %s, and supports merge/restore: %s', async (path, source, text) => {
+  ])('protects %s referenced by %s, and supports merging: %s', async (path, source, text) => {
     const vault = new MemoryVault({ [path]: PNG, 'keep.png': PNG, [source]: text });
     const result = await snapshot(vault);
     const image = result.media.find((media) => media.path === path)!;
@@ -27,8 +26,7 @@ describe('referenced-image recycling safety', () => {
     expect(() => buildPlan(result, [path])).toThrow('Image is referenced');
     expect(vault.removed).toEqual([]);
 
-    const recovery = new RecoveryStore(new MemoryDisk());
-    const service = new OperationService(vault, recovery, digest);
+    const service = new OperationService(vault, digest);
     const plan = buildPlan(result, [path], 'keep.png');
     await service.execute(plan, result);
     expect(await vault.exists(path)).toBe(false);
@@ -36,9 +34,5 @@ describe('referenced-image recycling safety', () => {
     expect(
       (await snapshot(vault)).media.find((media) => media.path === 'keep.png')?.references,
     ).toHaveLength(1);
-    await service.restore(plan);
-    expect(await vault.readText(source)).toBe(text);
-    expect(await vault.readBinary(path)).toEqual(PNG);
-    expect(await recovery.history()).toEqual([]);
   });
 });

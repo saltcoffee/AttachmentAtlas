@@ -3,16 +3,13 @@ import { ItemView, WorkspaceLeaf } from 'obsidian';
 import type AttachmentAtlas from '../main';
 import { unreferencedReasons } from '../application/scan';
 import { type Media, type Snapshot } from '../domain/model';
-import { finishedRecoveryState } from '../domain/recovery';
 import { bytes } from './modals';
-import { HistorySection } from './history-section';
 export const VIEW_TYPE = 'attachment-atlas-organizer';
 export class OrganizerView extends ItemView {
-  private tab: 'duplicates' | 'unreferenced' | 'large' | 'blocked' | 'history' = 'duplicates';
+  private tab: 'duplicates' | 'unreferenced' | 'large' | 'blocked' = 'duplicates';
   private filter = '';
   private page = 0;
   private selected = new Set<string>();
-  private historySection = new HistorySection();
   constructor(
     leaf: WorkspaceLeaf,
     private plugin: AttachmentAtlas,
@@ -33,10 +30,6 @@ export class OrganizerView extends ItemView {
   }
   async onClose(): Promise<void> {
     this.contentEl.empty();
-  }
-  showHistory(): void {
-    this.tab = 'history';
-    this.render();
   }
   render(): void {
     const el = this.contentEl;
@@ -78,7 +71,6 @@ export class OrganizerView extends ItemView {
       ],
       ['large', 'Large images'],
       ['blocked', 'Needs review'],
-      ['history', 'History'],
     ] as const) {
       const button = nav.createEl('button', {
         text: t(label),
@@ -90,15 +82,6 @@ export class OrganizerView extends ItemView {
         this.selected.clear();
         this.render();
       };
-    }
-    if (this.tab === 'history') {
-      this.historySection.render(el.createDiv(), {
-        entries: this.plugin.history,
-        busy: this.plugin.busy,
-        previewCleanup: (ids) => void this.plugin.previewCleanup(ids),
-        previewRestore: (id) => this.plugin.previewRestore(id),
-      });
-      return;
     }
     const snapshot = this.plugin.snapshot;
     if (!snapshot) {
@@ -291,8 +274,6 @@ export class OrganizerView extends ItemView {
     if (this.plugin.busy) return t('Wait for the running task to finish.');
     if (snapshot.blockers.length)
       return t('Open Needs review and resolve the blocking issues, then scan again.');
-    if (this.plugin.history.some((entry) => !finishedRecoveryState(entry.state)))
-      return t('Resolve unfinished recovery operations in History before merging or recycling.');
     return '';
   }
   private imageRow(el: HTMLElement, image: Media): void {

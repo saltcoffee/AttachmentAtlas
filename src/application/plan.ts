@@ -2,12 +2,7 @@ import { assert, type Plan, type Snapshot } from '../domain/model';
 import { rewrite, verifyTargets } from '../references';
 import { unreferencedReasons } from './scan';
 import { asMessage, message } from '../domain/messages';
-export function buildPlan(
-  snapshot: Snapshot,
-  retirePaths: string[],
-  keepPath?: string,
-  now = Date.now(),
-): Plan {
+export function buildPlan(snapshot: Snapshot, retirePaths: string[], keepPath?: string): Plan {
   assert(!snapshot.blockers.length, 'Reference coverage is incomplete.');
   assert(
     retirePaths.length &&
@@ -41,10 +36,6 @@ export function buildPlan(
       );
     return { path, digest: image.digest, size: image.size };
   });
-  assert(
-    retire.reduce((total, image) => total + image.size, 0) <= 192 * 1024 * 1024,
-    'Recovery plan exceeds 192 MiB. Select fewer images.',
-  );
   const replacements = new Map(retire.map((image) => [image.path, keep?.path ?? '']));
   const updated = snapshot.sources.map((source) => ({
     path: source.path,
@@ -54,8 +45,6 @@ export function buildPlan(
     afterNames = beforeNames.filter((path) => !retirePaths.includes(path));
   verifyTargets(snapshot.sources, updated, beforeNames, afterNames, replacements);
   return {
-    id: crypto.randomUUID(),
-    createdAt: now,
     revision: snapshot.revision,
     kind: keep ? 'merge-exact' : 'recycle-unreferenced',
     retire,

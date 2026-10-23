@@ -1,12 +1,12 @@
 # Contributing to Attachment Atlas
 
-Thanks for helping improve reliable image management in Obsidian. The project currently has a 0.1.0 development build. Check the supported behavior in the [README](README.md) and the conventions below before changing implementation. Contributions and discussions in English or Chinese are welcome.
+Thanks for helping improve reliable image management in Obsidian. Check the supported behavior in the [README](README.md) and the conventions below before changing implementation. Contributions and discussions in English or Chinese are welcome.
 
 ## Useful contributions now
 
 - Describe concrete duplicate-image or unreferenced-image workflows.
 - Provide small, synthetic examples of unusual links or Canvas references.
-- Review recovery behavior, conflicts, accessibility, and performance constraints.
+- Review recycling behavior, partial failures, accessibility, and performance constraints.
 - Improve documentation without presenting planned features as implemented.
 
 Use the issue templates for reproducible bugs and feature proposals. For sensitive issues, follow [SECURITY.md](SECURITY.md).
@@ -27,9 +27,9 @@ Use the project npm version when updating dependencies and commit the resulting 
 
 Dependabot checks weekly and groups minor and patch version updates into one open PR per ecosystem (npm and GitHub Actions). Major version updates require manual review and adaptation. Close existing upgrade PRs that are being deferred; changing the configuration does not erase past failed workflow runs. Checks run on pull requests and pushes to `main`, so feature-branch pushes do not duplicate the PR checks.
 
-`npm run dev` watches plugin sources. After changing the Worker source, restart the development build. Open the generated `dev-vault/` folder as a vault in Obsidian and enable Attachment Atlas to check the native interface. The generator preserves existing fixture edits and recovery records while refreshing the plugin files.
+`npm run dev` watches plugin sources. After changing the Worker source, restart the development build. Open the generated `dev-vault/` folder as a vault in Obsidian and enable Attachment Atlas to check the native interface. The generator preserves existing fixture edits while refreshing the plugin files.
 
-In that test vault, verify duplicate merging, reference updates, restoration, and recovery-area cleanup. Confirm that successful restoration removes only that operation's recovery data, while conflicts preserve later edits and recovery materials. Automated tests do not replace real-app checks of previews, confirmation, cancellation, keyboard interaction, and application restart.
+In that test vault, verify duplicate merging, reference updates, and unreferenced-image recycling with Obsidian configured for system trash, vault trash, and permanent deletion. In all three cases, verify that the plugin requests system trash; when system trash is unavailable, Obsidian falls back to vault trash. Verify that previews do not write files, that cleanup creates no plugin backup directory, and that failures or cancellation stop remaining work while preserving applied changes. Automated tests do not replace real-app checks of confirmation, keyboard interaction, and application restart.
 
 For documentation only:
 
@@ -48,18 +48,18 @@ The documentation check validates public Markdown for UTF-8, final newlines, tra
 - Remove obsolete internal implementations instead of adding compatibility layers.
 - Use precise source patches for links; never globally replace attachment filenames.
 - Keep scanning read-only with respect to notes and attachments.
-- Require explicit plans and verified recovery copies before user-content writes or recycling.
-- Verify durable recovery copies in `.attachment-atlas-recovery/` before removing active files with `FileManager.trashFile()` to respect Obsidian's deletion preference. Do not manage Obsidian or system trash copies.
-- Manual recovery-data cleanup requires explicit permanent-deletion consent and a revalidated manifest. Verified full restoration authorizes automatic disposal of that operation only. Both paths require persisted interruption state and per-file removal, never recursive directory deletion.
-- Do not add unattended expiry of unrestored resources, telemetry, or runtime dependency downloads. Disposal after a user-confirmed, fully verified restore is part of the recovery lifecycle.
+- Require explicit plans and execution-time checks before updating references or recycling images.
+- Update and verify every planned reference before recycling any image. Use `Vault.trash(file, true)` for one explicit attachment at a time to request system trash with Obsidian's local-trash fallback. Do not use `FileManager.trashFile()`, which can permanently delete files depending on the host setting. Never fall back to permanent deletion or empty the user's trash.
+- Keep already applied changes if an operation fails or is cancelled, stop remaining work, and require a fresh scan. Never overwrite later user edits or recreate recycled files.
+- Keep the plugin free of image backups, note snapshots, operation journals, runtime dependency downloads, and telemetry.
 
 ## Tests and fixtures
 
-The UI reads Obsidian's public `getLanguage()` API. Chinese locales use Simplified Chinese; all other locales use the canonical English templates. Keep translations in `src/i18n/`, route UI text through `src/ui/i18n.ts`, and use structured domain messages for dynamic diagnostics and progress. Paths and note content are literal values and must never be translated. Keep persisted operation kinds and states unchanged. Translation tests check locale fallback, placeholders, coverage, and confirmation controls.
+The UI reads Obsidian's public `getLanguage()` API. Chinese locales use Simplified Chinese; all other locales use the canonical English templates. Keep translations in `src/i18n/`, route UI text through `src/ui/i18n.ts`, and use structured domain messages for dynamic diagnostics and progress. Paths and note content are literal values and must never be translated. Translation tests check locale fallback, placeholders, coverage, and confirmation controls.
 
-For reference or mutation changes, include a small reproducible vault fixture and the expected final content. Cover relevant failures such as interrupted writes, storage errors, changed references, modified original images, restoration conflicts, and interrupted recovery-data cleanup. UI-only or documentation changes need proportionate verification.
+For reference or mutation changes, include a small reproducible vault fixture and the expected final content. Cover relevant failures such as interrupted writes, storage errors, changed references, modified original images, trash failures, concurrent operations, and cancellation between reference writes or image deletions. UI-only or documentation changes need proportionate verification.
 
-Use generated assets or clearly licensed fixtures. Do not include real notes, private images, authentication data, recovery archives, user paths, or personal vault configuration. Never run failure injection against a personal vault.
+Use generated assets or clearly licensed fixtures. Do not include real notes, private images, authentication data, backups, user paths, or personal vault configuration. Never run failure injection against a personal vault.
 
 ## Pull requests
 
@@ -92,7 +92,7 @@ The Release workflow runs only when a version tag such as `0.1.0` is pushed. Ord
 
 Use the intended version in place of `0.1.0`. The workflow checks the tagged source, builds once, attests the three plugin assets, and hands an explicit artifact list to a separate publishing job. The build job receives `id-token: write` and `attestations: write` to sign and store provenance; only the publishing job receives `contents: write`. Both use GitHub's automatic `GITHUB_TOKEN`, with no personal token required. GitHub Actions must be enabled and repository/organization policy must allow those permissions and the pinned official actions.
 
-The published release contains only `main.js`, `manifest.json`, and `styles.css`, the assets supported by Obsidian. GitHub stores build provenance attestations for all three; verify a downloaded asset with `gh attestation verify main.js --repo saltcoffee/AttachmentAtlas`. The body comes from that version's changelog section. GitHub supplies the source ZIP and tarball. `npm run package` still creates a local installation ZIP with license notices; it is not uploaded to Releases. Local-only `docs/`, test vaults, and recovery data are excluded from the uploaded assets.
+The published release contains only `main.js`, `manifest.json`, and `styles.css`, the assets supported by Obsidian. GitHub stores build provenance attestations for all three; verify a downloaded asset with `gh attestation verify main.js --repo saltcoffee/AttachmentAtlas`. The body comes from that version's changelog section. GitHub supplies the source ZIP and tarball. `npm run package` still creates a local installation ZIP with license notices; it is not uploaded to Releases. Local-only `docs/`, test vaults, and private data are excluded from the uploaded assets.
 
 Assets are uploaded to a draft first, and the workflow publishes only after all uploads succeed. It verifies that the remote tag still resolves to the built commit, supports annotated tags, and stops if an existing release prevents creation. If an interrupted upload leaves a draft, inspect and complete that draft manually or remove that specific draft before rerunning the failed job. Do not move a published version tag; publish a new version for corrections. Creating a GitHub Release does not submit the plugin to the Obsidian community directory.
 

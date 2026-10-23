@@ -1,9 +1,8 @@
 import { App, FileSystemAdapter, MarkdownView, TFile } from 'obsidian';
 import { lstat } from 'node:fs/promises';
 import { join } from 'node:path';
-import { RECOVERY_ROOT, assert, type Reference, type VaultPort } from '../domain/model';
-import { active, dirname, vaultPath } from '../domain/paths';
-import type { RecoveryDisk } from './recovery-store';
+import { assert, type Reference, type VaultPort } from '../domain/model';
+import { active, vaultPath } from '../domain/paths';
 import { message } from '../domain/messages';
 export class ObsidianVault implements VaultPort {
   constructor(private app: App) {}
@@ -74,83 +73,11 @@ export class ObsidianVault implements VaultPort {
     await this.readText(path);
     await this.app.vault.process(this.file(path), transform);
   }
-  async createBinary(path: string, data: ArrayBuffer): Promise<void> {
-    await this.guard(path);
-    assert(!(await this.exists(path)), 'Restore target already exists.');
-    const parent = dirname(path);
-    if (parent && !(await this.exists(parent))) await this.app.vault.createFolder(parent);
-    await this.app.vault.createBinary(path, data);
-  }
   async remove(path: string): Promise<void> {
     assert(active(path), 'Only active attachment paths can be removed.');
     await this.guard(path);
-    await this.app.fileManager.trashFile(this.file(path));
-  }
-  disk(): RecoveryDisk {
-    const adapter = this.app.vault.adapter;
-    const guard = async (path: string) => {
-      assert(
-        path === RECOVERY_ROOT || path.startsWith(`${RECOVERY_ROOT}/`),
-        'Recovery access outside its directory.',
-      );
-      await this.guard(path);
-    };
-    return {
-      removeFile: async (path) => {
-        await guard(path);
-        assert(path !== RECOVERY_ROOT, 'The recovery root cannot be deleted.');
-        const stats = await adapter.stat(path);
-        assert(stats?.type === 'file', 'Cleanup accepts one explicit file at a time.');
-        await adapter.remove(path);
-      },
-      removeEmptyFolder: async (path) => {
-        await guard(path);
-        assert(path !== RECOVERY_ROOT, 'The recovery root cannot be deleted.');
-        const stats = await adapter.stat(path);
-        assert(stats?.type === 'folder', 'Cleanup directory is missing.');
-        const listing = await adapter.list(path);
-        assert(
-          !listing.files.length && !listing.folders.length,
-          'Cleanup cannot remove a non-empty folder.',
-        );
-        await adapter.rmdir(path, false);
-      },
-      size: async (path) => {
-        await guard(path);
-        const stats = await adapter.stat(path);
-        assert(stats?.type === 'file', 'Recovery object is missing.');
-        return stats.size;
-      },
-      exists: async (path) => {
-        await guard(path);
-        return adapter.exists(path);
-      },
-      mkdir: async (path) => {
-        await guard(path);
-        if (!(await adapter.exists(path))) await adapter.mkdir(path);
-      },
-      list: async (path) => {
-        await guard(path);
-        return adapter.list(path);
-      },
-      read: async (path) => {
-        await guard(path);
-        return adapter.read(path);
-      },
-      readBinary: async (path) => {
-        await guard(path);
-        return adapter.readBinary(path);
-      },
-      writeNew: async (path, content) => {
-        await guard(path);
-        assert(!(await adapter.exists(path)), 'Recovery record already exists.');
-        await adapter.write(path, content);
-      },
-      writeBinaryNew: async (path, data) => {
-        await guard(path);
-        assert(!(await adapter.exists(path)), 'Recovery object already exists.');
-        await adapter.writeBinary(path, data);
-      },
-    };
+    // FileManager.trashFile permanently deletes when the host preference is "none".
+    // eslint-disable-next-line obsidianmd/prefer-file-manager-trash-file -- Cleanup must use trash even when the host preference is permanent deletion.
+    await this.app.vault.trash(this.file(path), true);
   }
 }

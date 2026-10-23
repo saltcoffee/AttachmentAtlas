@@ -5,9 +5,8 @@ import { decompressScene } from '../src/references/excalidraw-compression';
 import { buildPlan } from '../src/application/plan';
 import { OperationService } from '../src/application/execute';
 import { digest, textBytes, type Source } from '../src/domain/model';
-import { RecoveryStore } from '../src/infrastructure/recovery-store';
 import { drawing } from './excalidraw-fixtures';
-import { MemoryDisk, MemoryVault, PNG, snapshot } from './helpers';
+import { MemoryVault, PNG, snapshot } from './helpers';
 
 describe('bounded Excalidraw decompression', () => {
   it.each([
@@ -52,13 +51,11 @@ describe('read-only Excalidraw reference indexing', () => {
       expect(() => buildPlan(result, ['used.png'])).toThrow();
       // Retaining the drawing's attachment permits unrelated duplicate copies to be merged.
       const plan = buildPlan(result, ['other.png'], 'used.png');
-      const recovery = new RecoveryStore(new MemoryDisk());
-      const operations = new OperationService(vault, recovery, digest);
+      const operations = new OperationService(vault, digest);
       await operations.execute(plan, result);
       expect(await vault.readText('map.excalidraw.md')).toBe(text);
-      await operations.restore(plan);
-      expect(await vault.readBinary('other.png')).toEqual(PNG);
-      expect(await vault.readText('map.excalidraw.md')).toBe(text);
+      expect(vault.removed).toEqual(['other.png']);
+      expect(await vault.readBinary('used.png')).toEqual(PNG);
     },
   );
   it('allows immediate cleanup next to a drawing with no attachments', async () => {
@@ -67,10 +64,7 @@ describe('read-only Excalidraw reference indexing', () => {
     const result = await snapshot(vault);
     expect(result.blockers).toEqual([]);
     const plan = buildPlan(result, ['unused.png']);
-    await new OperationService(vault, new RecoveryStore(new MemoryDisk()), digest).execute(
-      plan,
-      result,
-    );
+    await new OperationService(vault, digest).execute(plan, result);
     expect(vault.removed).toEqual(['unused.png']);
     expect(await vault.readText('map.excalidraw.md')).toBe(text);
   });
@@ -153,12 +147,9 @@ describe('read-only Excalidraw reference indexing', () => {
       'map.excalidraw.md',
       textBytes(drawing([], '## Embedded Files\nfile1: [[unused.png]]\n')),
     );
-    await expect(
-      new OperationService(vault, new RecoveryStore(new MemoryDisk()), digest).execute(
-        plan,
-        result,
-      ),
-    ).rejects.toThrow('sources changed');
+    await expect(new OperationService(vault, digest).execute(plan, result)).rejects.toThrow(
+      'sources changed',
+    );
     expect(vault.removed).toEqual([]);
   });
 });
