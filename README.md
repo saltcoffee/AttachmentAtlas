@@ -45,9 +45,6 @@ To limit image scanning or protect folders, open **Settings → Attachment Atlas
 
 Attachment Atlas is free to use. Optional donations support development and maintenance.
 
-<details>
-<summary>Donate with WeChat Pay or Alipay</summary>
-
 Use the QR code for your payment app.
 
 |                                             WeChat Pay · 微信支付                                              |                                           Alipay · 支付宝                                            |
@@ -55,8 +52,6 @@ Use the QR code for your payment app.
 | <img src="assets/donations/wechat-pay.jpg" alt="WeChat Pay donation QR code — 微信支付打赏二维码" width="180"> | <img src="assets/donations/alipay.jpg" alt="Alipay donation QR code — 支付宝打赏二维码" width="180"> |
 
 [Open WeChat Pay QR code](assets/donations/wechat-pay.jpg) · [Open Alipay QR code](assets/donations/alipay.jpg)
-
-</details>
 
 ## Feedback and contributing
 

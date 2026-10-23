@@ -45,9 +45,6 @@
 
 Attachment Atlas 免费使用。欢迎自愿打赏，支持后续开发与维护。
 
-<details>
-<summary>微信支付 / 支付宝打赏</summary>
-
 请使用对应的支付应用扫描二维码。
 
 |                                       微信支付 · WeChat Pay                                        |                                        支付宝 · Alipay                                         |
@@ -55,8 +52,6 @@ Attachment Atlas 免费使用。欢迎自愿打赏，支持后续开发与维护
 | <img src="assets/donations/wechat-pay.jpg" alt="微信支付打赏二维码（请使用微信扫码）" width="180"> | <img src="assets/donations/alipay.jpg" alt="支付宝打赏二维码（请使用支付宝扫码）" width="180"> |
 
 [查看微信支付二维码](assets/donations/wechat-pay.jpg) · [查看支付宝二维码](assets/donations/alipay.jpg)
-
-</details>
 
 ## 反馈与参与
 
