@@ -25,6 +25,8 @@ node scripts/dev-vault.mjs
 
 Use the project npm version when updating dependencies and commit the resulting `package-lock.json` with `package.json`. Validate installation with `npm ci` in a clean checkout before pushing dependency changes.
 
+Dependabot checks weekly and groups minor and patch version updates into one open PR per ecosystem (npm and GitHub Actions). Major version updates require manual review and adaptation. Close existing upgrade PRs that are being deferred; changing the configuration does not erase past failed workflow runs. Checks run on pull requests and pushes to `main`, so feature-branch pushes do not duplicate the PR checks.
+
 `npm run dev` watches plugin sources. After changing the Worker source, restart the development build. Open the generated `dev-vault/` folder as a vault in Obsidian and enable Attachment Atlas to check the native interface. The generator preserves existing fixture edits and recovery records while refreshing the plugin files.
 
 In that test vault, verify duplicate merging, reference updates, restoration, and recovery-area cleanup. Confirm that successful restoration removes only that operation's recovery data, while conflicts preserve later edits and recovery materials. Automated tests do not replace real-app checks of previews, confirmation, cancellation, keyboard interaction, and application restart.
