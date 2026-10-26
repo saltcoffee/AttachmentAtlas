@@ -10,7 +10,7 @@ Find duplicate images, clean up unused images, and keep your Obsidian notes link
 
 Preview changes before applying them. Everything runs locally inside your vault, with no account, network requests, or telemetry.
 
-**Supported:** Obsidian desktop 1.13.0+; static PNG, JPEG, and WebP images. Interface: English and Simplified Chinese.
+**Supported:** Obsidian desktop 1.8.7+; static PNG, JPEG, and WebP images. Interface: English and Simplified Chinese. Settings search integration is available on Obsidian 1.13.0+.
 
 ## Installation
 

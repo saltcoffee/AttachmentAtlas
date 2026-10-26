@@ -1,11 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  Setting,
-  type App,
-  type PluginManifest,
-  type SettingGroup,
-  type WorkspaceLeaf,
-} from 'obsidian';
+import { Setting, type App, type PluginManifest, type WorkspaceLeaf } from 'obsidian';
 import AttachmentAtlas from '../src/main';
 import { ConfirmPlanModal } from '../src/ui/modals';
 import { OrganizerView } from '../src/ui/organizer-view';
@@ -47,6 +41,9 @@ vi.mock('obsidian', async () => {
     }
     setDesc(text: string) {
       this.el.createEl('p', { text });
+      return this;
+    }
+    setHeading() {
       return this;
     }
     addText(callback: (input: object) => void) {
@@ -126,15 +123,25 @@ vi.mock('obsidian', async () => {
 function elements(element: HTMLElement): UiElement {
   return element as unknown as UiElement;
 }
-function renderSettings(tab: AtlasSettingsTab): UiElement {
+const settingsRenderers = ['legacy', 'declarative'] as const;
+function renderSettings(
+  tab: AtlasSettingsTab,
+  renderer: (typeof settingsRenderers)[number] = 'declarative',
+): UiElement {
   const container = elements(tab.containerEl);
+  if (renderer === 'legacy') {
+    tab.display();
+    return container;
+  }
+  container.empty();
   for (const definition of tab.getSettingDefinitions()) {
     if (!('type' in definition) || definition.type !== 'group') continue;
+    new Setting(container as unknown as HTMLElement).setName(definition.heading).setHeading();
     for (const item of definition.items ?? []) {
       if ('type' in item) continue;
       const setting = new Setting(container as unknown as HTMLElement).setName(item.name);
       if (typeof item.desc === 'string') setting.setDesc(item.desc);
-      if ('render' in item) item.render?.(setting, {} as SettingGroup);
+      if ('render' in item) item.render?.(setting);
     }
   }
   return container;
@@ -242,61 +249,98 @@ describe('localized plugin surfaces', () => {
     },
   );
 
-  it('indexes settings without side effects and saves a normalized draft only on confirmation', async () => {
-    const saved = settingsFrom({ scope: '', preferredFolder: '', protectedPaths: [] });
-    const updateSettings = vi.fn().mockResolvedValue(undefined);
-    const plugin = { settings: saved, updateSettings } as unknown as AttachmentAtlas;
-    const tab = new AtlasSettingsTab(app, plugin);
-    const definitions = tab.getSettingDefinitions();
-    const group = definitions[0];
-    expect(
-      group && 'type' in group && group.type === 'group' && group.items?.map((item) => item.name),
-    ).toEqual(['', 'Image scope', 'Preferred retained folder', 'Protected paths', 'Save settings']);
-    expect(updateSettings).not.toHaveBeenCalled();
-    expect(elements(tab.containerEl).all()).toHaveLength(1);
+  it.each(settingsRenderers)(
+    'indexes without side effects and saves a normalized draft using %s settings',
+    async (renderer) => {
+      const saved = settingsFrom({ scope: '', preferredFolder: '', protectedPaths: [] });
+      const updateSettings = vi.fn().mockResolvedValue(undefined);
+      const plugin = { settings: saved, updateSettings } as unknown as AttachmentAtlas;
+      const tab = new AtlasSettingsTab(app, plugin);
+      const definitions = tab.getSettingDefinitions();
+      const group = definitions[0];
+      expect(
+        group && 'type' in group && group.type === 'group' && group.items?.map((item) => item.name),
+      ).toEqual([
+        '',
+        'Image scope',
+        'Preferred retained folder',
+        'Protected paths',
+        'Save settings',
+      ]);
+      expect(updateSettings).not.toHaveBeenCalled();
+      expect(elements(tab.containerEl).all()).toHaveLength(1);
 
-    const container = renderSettings(tab);
-    const inputs = container.all().filter((element) => ['input', 'textarea'].includes(element.tag));
-    for (const [index, value] of [
-      ' images ',
-      ' images/retained ',
-      ' important \n\n notes ',
-    ].entries()) {
-      inputs[index]!.value = value;
-      inputs[index]!.onchange?.();
-    }
-    expect(plugin.settings).toEqual(saved);
-    expect(updateSettings).not.toHaveBeenCalled();
-    container
-      .all()
-      .find((element) => element.tag === 'button')!
-      .onclick?.();
-    await vi.waitFor(() => expect(host.notices).toContain('Attachment Atlas settings saved.'));
-    expect(updateSettings).toHaveBeenCalledExactlyOnceWith({
-      scope: 'images',
-      preferredFolder: 'images/retained',
-      protectedPaths: ['important', 'notes'],
-    });
-  });
+      const container = renderSettings(tab, renderer);
+      const inputs = container
+        .all()
+        .filter((element) => ['input', 'textarea'].includes(element.tag));
+      for (const [index, value] of [
+        ' images ',
+        ' images/retained ',
+        ' important \n\n notes ',
+      ].entries()) {
+        inputs[index]!.value = value;
+        inputs[index]!.onchange?.();
+      }
+      expect(plugin.settings).toEqual(saved);
+      expect(updateSettings).not.toHaveBeenCalled();
+      container
+        .all()
+        .find((element) => element.tag === 'button')!
+        .onclick?.();
+      await vi.waitFor(() => expect(host.notices).toContain('Attachment Atlas settings saved.'));
+      expect(updateSettings).toHaveBeenCalledExactlyOnceWith({
+        scope: 'images',
+        preferredFolder: 'images/retained',
+        protectedPaths: ['important', 'notes'],
+      });
+    },
+  );
 
-  it('reports invalid drafts without changing persisted settings', async () => {
-    const saved = settingsFrom({ scope: '', preferredFolder: '', protectedPaths: [] });
-    const updateSettings = vi.fn(async (value: unknown) => {
-      settingsFrom(value);
-    });
-    const plugin = { settings: saved, updateSettings } as unknown as AttachmentAtlas;
-    const container = renderSettings(new AtlasSettingsTab(app, plugin));
-    const input = container.all().find((element) => element.tag === 'input')!;
-    input.value = '../outside-vault';
-    input.onchange?.();
-    container
-      .all()
-      .find((element) => element.tag === 'button')!
-      .onclick?.();
-    await vi.waitFor(() => expect(host.notices.join('\n')).toContain('Invalid settings.'));
-    expect(plugin.settings).toEqual(saved);
-    expect(host.notices).not.toContain('Attachment Atlas settings saved.');
-  });
+  it.each(settingsRenderers)(
+    'reports invalid drafts without changing persisted settings using %s',
+    async (renderer) => {
+      const saved = settingsFrom({ scope: '', preferredFolder: '', protectedPaths: [] });
+      const updateSettings = vi.fn(async (value: unknown) => {
+        settingsFrom(value);
+      });
+      const plugin = { settings: saved, updateSettings } as unknown as AttachmentAtlas;
+      const container = renderSettings(new AtlasSettingsTab(app, plugin), renderer);
+      const input = container.all().find((element) => element.tag === 'input')!;
+      input.value = '../outside-vault';
+      input.onchange?.();
+      container
+        .all()
+        .find((element) => element.tag === 'button')!
+        .onclick?.();
+      await vi.waitFor(() => expect(host.notices.join('\n')).toContain('Invalid settings.'));
+      expect(plugin.settings).toEqual(saved);
+      expect(host.notices).not.toContain('Attachment Atlas settings saved.');
+    },
+  );
+  it.each(['zh', 'en', 'fr'])(
+    'renders identical loaded settings on old and new Obsidian in %s',
+    (language) => {
+      host.language = language;
+      const settings = settingsFrom({
+        scope: 'images',
+        preferredFolder: 'images/keep',
+        protectedPaths: ['notes', 'keep.png'],
+      });
+      const plugin = { settings, updateSettings: vi.fn() } as unknown as AttachmentAtlas;
+      const legacy = renderSettings(new AtlasSettingsTab(app, plugin), 'legacy');
+      const native = renderSettings(new AtlasSettingsTab(app, plugin), 'declarative');
+      expect(legacy.contents()).toBe(native.contents());
+      for (const view of [legacy, native])
+        expect(
+          view
+            .all()
+            .filter((node) => ['input', 'textarea'].includes(node.tag))
+            .map((node) => node.value),
+        ).toEqual(['images', 'images/keep', 'notes\nkeep.png']);
+      expect(plugin.settings).toEqual(settings);
+    },
+  );
   it('reads language changes from Obsidian', () => {
     host.language = 'zh-TW';
     expect(t('Scan vault')).toBe('扫描当前库');

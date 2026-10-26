@@ -18,7 +18,9 @@ assert(code.includes('Fingerprint task stopped'));
 assert(!/import\([^)]*https?:/.test(code));
 const { inputs } = await readJson('build/metafile.json');
 assert(
-  !Object.keys(inputs).some((path) => /node_modules\/(?:vitest|eslint|obsidian)\//.test(path)),
+  !Object.keys(inputs).some((path) =>
+    /node_modules\/(?:vitest|eslint|obsidian|obsidian-min-api)\//.test(path),
+  ),
   'Development dependency entered the bundle.',
 );
 console.log(

@@ -13,6 +13,8 @@ updates:
           - minor
           - patch
     ignore:
+      # The compatibility baseline follows manifest.minAppVersion, not the newest API release.
+      - dependency-name: obsidian-min-api
       - dependency-name: '*'
         update-types:
           - version-update:semver-major
