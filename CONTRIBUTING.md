@@ -25,6 +25,8 @@ node scripts/dev-vault.mjs
 
 Use the project npm version when updating dependencies and commit the resulting `package-lock.json` with `package.json`. Validate installation with `npm ci` in a clean checkout before pushing dependency changes.
 
+`npm run check:compat` checks plugin source against `obsidian-min-api`, an npm alias pinned to the official API version in `manifest.minAppVersion` (currently 1.8.7). Keep this baseline synchronized when intentionally changing the minimum version. The regular typecheck uses current API types. Both checks run in CI; neither replaces real-app acceptance on the minimum supported version.
+
 Dependabot checks weekly and groups minor and patch version updates into one open PR per ecosystem (npm and GitHub Actions). Major version updates require manual review and adaptation. Close existing upgrade PRs that are being deferred; changing the configuration does not erase past failed workflow runs. Checks run on pull requests and pushes to `main`, so feature-branch pushes do not duplicate the PR checks.
 
 `npm run dev` watches plugin sources. After changing the Worker source, restart the development build. Open the generated `dev-vault/` folder as a vault in Obsidian and enable Attachment Atlas to check the native interface. The generator preserves existing fixture edits while refreshing the plugin files.

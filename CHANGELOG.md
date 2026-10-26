@@ -4,6 +4,13 @@ Notable user-facing changes are recorded here. Version entries are used as relea
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-10-25
+
+### Changed
+
+- Lowers the minimum Obsidian desktop version to 1.8.7. The settings page shares its controls and save validation across the older renderer and native declarative settings on 1.13.0+, preserving settings search on newer versions.
+- Checks plugin source against the pinned minimum Obsidian API as part of CI, alongside the current API types.
+
 ## [0.1.3] - 2026-10-23
 
 ### Fixed
