@@ -1,20 +1,53 @@
 import { t, problem } from './i18n';
 import { ItemView, WorkspaceLeaf } from 'obsidian';
 import type AttachmentAtlas from '../main';
-import { unreferencedReasons } from '../application/scan';
-import { type Media, type Snapshot } from '../domain/model';
+import type { SelectionRequest } from '../application/plan';
+import { OrganizerResults } from './organizer-results';
+import type { Snapshot } from '../domain/model';
 import { bytes } from './modals';
+import { captureFocus, restoreFocus } from './focus';
+import { renderOrganizerFilters, type FilterDrafts } from './organizer-filters';
+import {
+  createOrganizerViewState,
+  EMPTY_QUERY,
+  parseSizeQuery,
+  type ImageQuery,
+  type OrganizerViewState,
+} from './organizer-state';
+
 export const VIEW_TYPE = 'attachment-atlas-organizer';
+
 export class OrganizerView extends ItemView {
-  private tab: 'duplicates' | 'unreferenced' | 'large' | 'blocked' = 'duplicates';
-  private filter = '';
-  private page = 0;
-  private selected = new Set<string>();
+  private static nextViewId = 1;
+  private readonly viewId = OrganizerView.nextViewId++;
+  private state: OrganizerViewState = createOrganizerViewState();
+  private drafts: FilterDrafts = {
+    path: '',
+    format: 'all',
+    min: '',
+    max: '',
+    references: 'all',
+    protection: 'all',
+  };
+  private queryValid = true;
+  private sizeError = '';
+  private unsubscribe: (() => void) | null = null;
+  private lastScanId = 0;
+  private results!: OrganizerResults;
+  private previewControls: HTMLElement | null = null;
+
   constructor(
     leaf: WorkspaceLeaf,
     private plugin: AttachmentAtlas,
   ) {
     super(leaf);
+    this.results = new OrganizerResults(
+      plugin,
+      this.state,
+      this.viewId,
+      () => this.queryValid,
+      (request) => this.requestPreview(request),
+    );
   }
   getViewType(): string {
     return VIEW_TYPE;
@@ -26,13 +59,33 @@ export class OrganizerView extends ItemView {
     return 'images';
   }
   async onOpen(): Promise<void> {
+    this.lastScanId = this.plugin.selection.state.scanId;
+    this.unsubscribe = this.plugin.selection.subscribe((selection) => {
+      if (selection.scanId !== this.lastScanId) {
+        this.lastScanId = selection.scanId;
+        this.state.pageByTab = { duplicates: 0, unreferenced: 0, large: 0, blocked: 0 };
+        this.state.memberPages = {};
+        this.state.memberModes = {};
+        this.state.duplicateMode = 'matching';
+        this.state.unreferencedMode = 'matching';
+        this.results.resetForScan();
+        this.render();
+        return;
+      }
+      this.updateSelection();
+    });
     this.render();
   }
   async onClose(): Promise<void> {
+    this.unsubscribe?.();
+    this.unsubscribe = null;
+    this.plugin.previewViewClosed(this);
     this.contentEl.empty();
   }
+
   render(): void {
-    const el = this.contentEl;
+    const el = this.contentEl,
+      focus = captureFocus(el);
     el.empty();
     el.addClass('atlas-view');
     el.createEl('h2', { text: t('Attachment Atlas') });
@@ -42,14 +95,17 @@ export class OrganizerView extends ItemView {
       cls: 'mod-cta',
     });
     scan.disabled = this.plugin.busy;
-    scan.onclick = () => {
-      this.selected.clear();
-      void this.plugin.scanVault();
-    };
+    scan.dataset.focusKey = 'scan';
+    scan.dataset.focusFallback = 'stop-task';
+    scan.onclick = () => void this.plugin.scanVault();
     if (this.plugin.busy) {
       const cancel = controls.createEl('button', { text: t('Stop task') });
+      cancel.dataset.focusKey = 'stop-task';
+      cancel.dataset.focusFallback = 'scan';
       cancel.onclick = () => this.plugin.cancel();
     }
+    this.previewControls = controls.createDiv({ cls: 'atlas-actions' });
+    this.renderPreviewFeedback();
     const status = el.createEl('p', {
       text: t(this.plugin.status),
       cls: 'atlas-status',
@@ -59,30 +115,12 @@ export class OrganizerView extends ItemView {
       const error = el.createDiv({ cls: 'atlas-error', attr: { role: 'alert' } });
       error.createEl('p', { text: problem(this.plugin.lastError) });
       const retry = error.createEl('button', { text: t('Retry scan') });
+      retry.dataset.focusKey = 'retry-scan';
+      retry.dataset.focusFallback = 'stop-task';
       retry.disabled = this.plugin.busy;
       retry.onclick = () => void this.plugin.scanVault();
     }
-    const nav = el.createDiv({ cls: 'atlas-tabs' });
-    for (const [key, label] of [
-      ['duplicates', 'Exact duplicates'],
-      [
-        'unreferenced',
-        this.plugin.snapshot?.blockers.length ? 'Potentially unreferenced' : 'Unreferenced',
-      ],
-      ['large', 'Large images'],
-      ['blocked', 'Needs review'],
-    ] as const) {
-      const button = nav.createEl('button', {
-        text: t(label),
-        attr: { 'aria-pressed': String(this.tab === key) },
-      });
-      button.onclick = () => {
-        this.tab = key;
-        this.page = 0;
-        this.selected.clear();
-        this.render();
-      };
-    }
+    this.renderTabs(el);
     const snapshot = this.plugin.snapshot;
     if (!snapshot) {
       el.createEl('p', {
@@ -90,6 +128,7 @@ export class OrganizerView extends ItemView {
           'Scan to inspect local images and their references. No notes or attachments change during scanning.',
         ),
       });
+      restoreFocus(el, focus);
       return;
     }
     status.setText(
@@ -100,244 +139,224 @@ export class OrganizerView extends ItemView {
         scope: snapshot.settings.scope || t('whole vault'),
       }),
     );
-    el.createEl('p', {
+    this.renderCoverage(el, snapshot);
+    renderOrganizerFilters(
+      el,
+      this.drafts,
+      this.state.sort,
+      this.sizeError,
+      (key, value, redraw) => {
+        this.drafts[key] = value;
+        this.commitDrafts();
+        if (redraw) this.render();
+        else this.renderResultsOnly();
+      },
+      (key, value) => {
+        if (key === 'key') this.state.sort.key = value as OrganizerViewState['sort']['key'];
+        else this.state.sort.direction = value as 'asc' | 'desc';
+        this.resetPages();
+        this.render();
+      },
+      () => {
+        this.drafts = {
+          path: '',
+          format: 'all',
+          min: '',
+          max: '',
+          references: 'all',
+          protection: 'all',
+        };
+        this.state.query = { ...EMPTY_QUERY };
+        this.state.sort = { key: 'size', direction: 'desc' };
+        this.queryValid = true;
+        this.sizeError = '';
+        this.resetPages();
+        this.render();
+      },
+    );
+    const results = el.createDiv();
+    results.dataset.role = 'results';
+    this.results.render(results, snapshot);
+    restoreFocus(el, focus);
+  }
+
+  private renderPreviewFeedback(): void {
+    const parent = this.previewControls;
+    if (!parent) return;
+    parent.empty();
+    if (this.plugin.previewing) {
+      parent.createSpan({
+        text: t('Building preview. You can keep reviewing your selection.'),
+        attr: { role: 'status' },
+      });
+      const cancel = parent.createEl('button', { text: t('Cancel preview construction') });
+      cancel.dataset.focusKey = 'cancel-preview-build';
+      cancel.onclick = () => this.plugin.cancelPreview();
+    }
+    if (this.plugin.previewError) {
+      parent.createEl('p', {
+        text: problem(this.plugin.previewError),
+        cls: 'atlas-error',
+        attr: { role: 'alert' },
+      });
+      if (this.plugin.canRetryPreview(this)) {
+        const retry = parent.createEl('button', { text: t('Retry preview') });
+        retry.dataset.focusKey = 'retry-preview';
+        retry.disabled = !this.queryValid || this.plugin.busy;
+        retry.onclick = () => this.plugin.retryPreview(this);
+      }
+    }
+  }
+
+  private updateSelection(): void {
+    const snapshot = this.plugin.snapshot;
+    if (!snapshot) {
+      this.render();
+      return;
+    }
+    const el = this.contentEl,
+      focus = captureFocus(el),
+      top = el.scrollTop,
+      left = el.scrollLeft;
+    if (!this.results.updateSelection(snapshot)) {
+      this.render();
+      return;
+    }
+    this.renderPreviewFeedback();
+    restoreFocus(el, focus);
+    el.scrollTop = top;
+    el.scrollLeft = left;
+  }
+
+  private renderTabs(parent: HTMLElement): void {
+    const nav = parent.createDiv({ cls: 'atlas-tabs' }),
+      blockerLabel = this.plugin.snapshot?.blockers.length
+        ? 'Potentially unreferenced'
+        : 'Unreferenced';
+    for (const [key, label] of [
+      ['duplicates', 'Exact duplicates'],
+      ['unreferenced', blockerLabel],
+      ['large', 'Large images'],
+      ['blocked', 'Needs review'],
+    ] as const) {
+      const button = nav.createEl('button', {
+        text: t(label),
+        attr: { 'aria-pressed': String(this.state.tab === key) },
+      });
+      button.dataset.focusKey = `tab:${key}`;
+      button.onclick = () => {
+        this.state.tab = key;
+        this.render();
+      };
+    }
+  }
+
+  private renderCoverage(parent: HTMLElement, snapshot: Snapshot): void {
+    parent.createEl('p', {
       text: snapshot.blockers.length
         ? t(
             'Incomplete reference coverage: {count} blockers. Merging and recycling are disabled.',
-            {
-              count: snapshot.blockers.length,
-            },
+            { count: snapshot.blockers.length },
           )
         : t(
             'Supported reference sources scanned. External apps and hidden configuration are outside coverage.',
           ),
+      cls: snapshot.blockers.length ? 'atlas-error' : 'atlas-muted',
+      attr: { role: snapshot.blockers.length ? 'alert' : 'status' },
     });
-    if (snapshot.blockers.length && this.tab !== 'blocked') {
-      const review = el.createEl('button', { text: t('View blocking issues') });
+    if (snapshot.blockers.length && this.state.tab !== 'blocked') {
+      const review = parent.createEl('button', { text: t('View blocking issues') });
+      review.dataset.focusKey = 'view-blocking-issues';
+      review.dataset.focusFallback = 'tab:blocked';
       review.onclick = () => {
-        this.tab = 'blocked';
-        this.page = 0;
-        this.selected.clear();
+        this.state.tab = 'blocked';
         this.render();
       };
     }
-    if (this.tab === 'blocked') {
-      snapshot.blockers.forEach((reason) =>
-        el.createEl('p', { text: problem(reason), cls: 'atlas-error' }),
-      );
-    }
-    const input = el.createEl('input', {
-      type: 'search',
-      placeholder: t('Filter by path'),
-      value: this.filter,
-      attr: { 'aria-label': t('Filter images by path') },
-    });
-    const results = el.createDiv();
-    input.oninput = () => {
-      this.filter = input.value;
-      this.page = 0;
-      this.renderResults(results);
-    };
-    this.renderResults(results);
   }
-  private renderResults(el: HTMLElement): void {
-    el.empty();
-    const snapshot = this.plugin.snapshot;
-    if (!snapshot) return;
-    const eligible = new Set(
-      snapshot.media
-        .filter((image) => !unreferencedReasons(image, snapshot).length)
-        .map((image) => image.path),
-    );
-    this.selected = new Set([...this.selected].filter((path) => eligible.has(path)));
-    const match = (image: Media) => image.path.toLowerCase().includes(this.filter.toLowerCase());
-    if (this.tab === 'duplicates') {
-      const groups = snapshot.duplicates.filter((group) => group.some(match));
-      if (!groups.length)
-        el.createEl('p', { text: t('No exact duplicate groups found in this scan.') });
-      for (const group of groups.slice(this.page * 25, (this.page + 1) * 25)) {
-        const card = el.createDiv({ cls: 'atlas-card' });
-        let kept = group[0]!.path;
-        const label = card.createEl('label', { text: t('Retain image: ') });
-        const select = label.createEl('select');
-        group.forEach((image) =>
-          select.createEl('option', { text: image.path, value: image.path }),
-        );
-        select.value = kept;
-        select.onchange = () => {
-          kept = select.value;
-          updateAction();
-        };
-        group.slice(0, 25).forEach((image) => this.imageRow(card, image));
-        if (group.length > 25)
-          card.createEl('p', {
-            text: t(
-              'Showing 25 of {count} identical images. Each confirmed operation recycles at most 100 eligible images; rescan to continue.',
-              { count: group.length },
-            ),
-            cls: 'atlas-muted',
-          });
-        const candidates = () => {
-          const chosen: Media[] = [];
-          let total = 0;
-          for (const image of group)
-            if (
-              image.path !== kept &&
-              !image.reasons.length &&
-              chosen.length < 100 &&
-              total + image.size <= 192 * 1024 * 1024
-            ) {
-              chosen.push(image);
-              total += image.size;
-            }
-          return chosen;
-        };
-        const button = card.createEl('button', { text: t('Preview merge') });
-        const explanation = card.createEl('p', { cls: 'atlas-muted', attr: { role: 'status' } });
-        const updateAction = () => {
-          const count = candidates().length;
-          const reason =
-            this.writeBlocker(snapshot) ||
-            (!count
-              ? t(
-                  'No duplicate copies can be recycled with this retained image. Check the image restrictions or choose another retained image.',
-                )
-              : '');
-          button.disabled = !!reason;
-          button.title = reason;
-          explanation.setText(reason);
-          explanation.hidden = !reason;
-          button.setText(t('Preview merge ({count})', { count }));
-        };
-        updateAction();
-        button.onclick = () =>
-          this.plugin.preview(
-            candidates().map((image) => image.path),
-            kept,
-          );
-      }
-      this.pagination(el, groups.length, 25);
+
+  private commitDrafts(): void {
+    const sizes = parseSizeQuery(this.drafts.min, this.drafts.max);
+    if (!sizes.valid) {
+      this.queryValid = false;
+      this.sizeError =
+        sizes.reason === 'range'
+          ? 'Minimum size must not exceed maximum size.'
+          : 'Enter non-negative whole KiB values.';
+      this.plugin.previewQueryChanged(this);
       return;
     }
-    let images = [...snapshot.media].filter(match);
-    if (this.tab === 'unreferenced') images = images.filter((image) => !image.references.length);
-    if (this.tab === 'blocked')
-      images = images.filter(
-        (image) =>
-          image.reasons.length ||
-          (!image.references.length && unreferencedReasons(image, snapshot).length),
-      );
-    images.sort((a, b) => b.size - a.size);
-    if (this.tab === 'unreferenced') {
-      const action = el.createEl('button', {
-        text: t('Preview recycling ({count})', { count: this.selected.size }),
-      });
-      const reason =
-        this.writeBlocker(snapshot) ||
-        (!this.selected.size ? t('Select images to preview recycling.') : '');
-      action.disabled = !!reason;
-      action.title = reason;
-      if (reason) el.createEl('p', { text: reason, cls: 'atlas-muted', attr: { role: 'status' } });
-      action.onclick = () => this.plugin.preview([...this.selected]);
-    }
-    if (!images.length) el.createEl('p', { text: t('No images match this category and filter.') });
-    for (const image of images.slice(this.page * 50, (this.page + 1) * 50)) {
-      const card = el.createDiv({ cls: 'atlas-card' });
-      if (this.tab === 'unreferenced') {
-        const label = card.createEl('label');
-        const checkbox = label.createEl('input', {
-          type: 'checkbox',
-          attr: { 'aria-label': t('Select {path}', { path: image.path }), 'data-path': image.path },
-        });
-        checkbox.checked = this.selected.has(image.path);
-        checkbox.disabled =
-          !!this.writeBlocker(snapshot) || !!unreferencedReasons(image, snapshot).length;
-        checkbox.onchange = () => {
-          if (checkbox.checked) this.selected.add(image.path);
-          else this.selected.delete(image.path);
-          this.renderResults(el);
-          Array.from(el.querySelectorAll<HTMLInputElement>('input[data-path]'))
-            .find((input) => input.dataset.path === image.path)
-            ?.focus();
-        };
-        label.createSpan({ text: t(' Select for recycling') });
+    this.queryValid = true;
+    this.sizeError = '';
+    const next: ImageQuery = {
+      path: this.drafts.path.trim(),
+      format: this.drafts.format as ImageQuery['format'],
+      references: this.drafts.references as ImageQuery['references'],
+      protection: this.drafts.protection as ImageQuery['protection'],
+      ...sizes,
+    };
+    if (JSON.stringify(next) !== JSON.stringify(this.state.query)) this.resetPages();
+    this.state.query = next;
+  }
+
+  private renderResultsOnly(): void {
+    const root = this.contentEl.querySelector<HTMLElement>('[data-role="results"]');
+    if (root && this.plugin.snapshot) this.results.render(root, this.plugin.snapshot);
+    let error = this.contentEl.querySelector<HTMLElement>('.atlas-filters [role="alert"]');
+    if (this.sizeError) {
+      if (error) error.setText(t(this.sizeError));
+      else {
+        const filters = this.contentEl.querySelector('.atlas-filters');
+        if (filters)
+          error = filters.createEl('p', {
+            text: t(this.sizeError),
+            cls: 'atlas-error',
+            attr: { role: 'alert', id: `atlas-size-error-${this.viewId}`, 'aria-live': 'polite' },
+          });
       }
-      this.imageRow(card, image);
-      if (this.tab === 'unreferenced' || this.tab === 'blocked')
-        unreferencedReasons(image, snapshot).forEach((reason) =>
-          card.createEl('p', { text: problem(reason), cls: 'atlas-muted' }),
-        );
+    } else error?.remove();
+    for (const key of ['min', 'max']) {
+      const field = Array.from(
+        this.contentEl.querySelectorAll<HTMLInputElement>('[data-focus-key]'),
+      ).find((input) => input.dataset.focusKey === key);
+      if (this.sizeError && error && field) {
+        if (!error.id) error.id = `atlas-size-error-${this.viewId}`;
+        field.setAttribute('aria-invalid', 'true');
+        field.setAttribute('aria-describedby', error.id);
+      } else {
+        field?.removeAttribute('aria-invalid');
+        field?.removeAttribute('aria-describedby');
+      }
     }
-    this.pagination(el, images.length, 50);
   }
-  private writeBlocker(snapshot: Snapshot): string {
-    if (this.plugin.busy) return t('Wait for the running task to finish.');
-    if (snapshot.blockers.length)
-      return t('Open Needs review and resolve the blocking issues, then scan again.');
-    return '';
-  }
-  private imageRow(el: HTMLElement, image: Media): void {
-    const row = el.createDiv({ cls: 'atlas-image' });
-    if (image.digest) {
-      const img = row.createEl('img', {
-        attr: {
-          src: this.app.vault.adapter.getResourcePath(image.path),
-          alt: image.path,
-          loading: 'lazy',
-        },
-      });
-      img.onerror = () => {
-        img.remove();
-      };
-    }
-    const description = row.createDiv();
-    description.createEl('strong', { text: image.path });
-    description.createEl('p', {
-      text: t('{format}{dimensions} · {size} · {count} references', {
-        format: image.format === 'Unsupported' ? t('Unsupported') : image.format,
-        dimensions: image.width && image.height ? ` · ${image.width}×${image.height}` : '',
-        size: bytes(image.size),
-        count: image.references.length,
-      }),
-      cls: 'atlas-muted',
-    });
-    if (!image.references.length && this.plugin.snapshot?.blockers.length)
-      description.createEl('p', {
-        text: t('No references detected yet; reference coverage is incomplete.'),
-        cls: 'atlas-muted',
-      });
-    image.reasons.forEach((reason) =>
-      description.createEl('p', { text: problem(reason), cls: 'atlas-muted' }),
+
+  private requestPreview(selection: SelectionRequest): void {
+    const state = this.plugin.selection.state;
+    void this.plugin.preview(
+      this,
+      {
+        scanId: state.scanId,
+        selectionRevision: state.selectionRevision,
+        selection,
+      },
+      this.queryValid,
     );
-    if (image.references.length) {
-      const details = description.createEl('details');
-      details.createEl('summary', { text: t('Reference locations') });
-      for (const ref of image.references) {
-        const button = details.createEl('button', {
-          text: `${ref.source}: ${ref.raw}`,
-          cls: 'atlas-reference',
-        });
-        button.onclick = () => void this.app.workspace.openLinkText(ref.source, '', false);
-      }
-    }
   }
-  private pagination(el: HTMLElement, total: number, size: number): void {
-    if (total <= size) return;
-    const controls = el.createDiv({ cls: 'atlas-actions' });
-    const previous = controls.createEl('button', { text: t('Previous') });
-    previous.disabled = this.page === 0;
-    previous.onclick = () => {
-      this.page--;
-      this.render();
-    };
-    controls.createSpan({
-      text: t('Page {page} of {total}', { page: this.page + 1, total: Math.ceil(total / size) }),
-    });
-    const next = controls.createEl('button', { text: t('Next') });
-    next.disabled = (this.page + 1) * size >= total;
-    next.onclick = () => {
-      this.page++;
-      this.render();
-    };
+
+  focusPreview(selection: SelectionRequest): void {
+    const key =
+      selection.kind === 'merge-exact'
+        ? `preview:merge:${selection.groupKey}`
+        : 'preview:unreferenced';
+    restoreFocus(this.contentEl, { keys: [key, 'scan'] });
+  }
+
+  canPreview(): boolean {
+    return this.queryValid;
+  }
+
+  private resetPages(): void {
+    this.state.pageByTab = { duplicates: 0, unreferenced: 0, large: 0, blocked: 0 };
+    this.state.memberPages = {};
   }
 }

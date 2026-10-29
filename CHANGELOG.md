@@ -4,6 +4,24 @@ Notable user-facing changes are recorded here. Version entries are used as relea
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-10-29
+
+### Added
+
+- Combine path, detected format, size, reference, and restriction filters with stable sorting and paginated image groups, members, and references.
+- Choose retained images and individual copies explicitly. Share selections across organizer views, keep hidden selections visible through summaries, and show exact count and byte limits before cleanup.
+- Build cancellable previews in a background Worker, with changed reference targets, local source context, and paginated access to complete source text.
+
+### Changed
+
+- Recheck source inventories, expected document contents, reference targets, and retained images before each document write and image deletion.
+
+### Fixed
+
+- Preserve image rows, expanded reference details, keyboard focus, and scroll position when selections change.
+- Reject expired preview confirmations and discard outdated background results after selection, scan, vault, or view changes.
+- Keep invalid size filters inline, report inconsistent group selections clearly, and use safe byte totals in cleanup previews.
+
 ## [0.1.4] - 2026-10-25
 
 ### Changed

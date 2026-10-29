@@ -5,11 +5,12 @@ import { ConfirmPlanModal } from '../src/ui/modals';
 import { OrganizerView } from '../src/ui/organizer-view';
 import { AtlasSettingsTab } from '../src/ui/settings-tab';
 import { t } from '../src/ui/i18n';
-import { buildPlan } from '../src/application/plan';
-import { MemoryVault, PNG, snapshot } from './helpers';
+import { MemoryVault, PNG, mergePlan, snapshot } from './helpers';
 import { UiElement } from './ui-elements';
 import { drawing } from './excalidraw-fixtures';
 import { settingsFrom } from '../src/infrastructure/settings';
+import type { Snapshot } from '../src/domain/model';
+import { duplicateGroupKey } from '../src/application/organizer-selection';
 
 const host = vi.hoisted(() => ({
   language: 'en',
@@ -123,6 +124,12 @@ vi.mock('obsidian', async () => {
 function elements(element: HTMLElement): UiElement {
   return element as unknown as UiElement;
 }
+function acceptSnapshot(plugin: AttachmentAtlas, result: Snapshot): void {
+  plugin.snapshot = null;
+  const scanId = plugin.selection.beginScan();
+  plugin.snapshot = result;
+  plugin.selection.acceptSnapshot(scanId, result);
+}
 const settingsRenderers = ['legacy', 'declarative'] as const;
 function renderSettings(
   tab: AtlasSettingsTab,
@@ -204,17 +211,16 @@ describe('localized plugin surfaces', () => {
       const result = await snapshot(vault);
       const before = new Map(vault.files);
       const organizer = new OrganizerView({ app } as unknown as WorkspaceLeaf, plugin);
-      organizer.render();
+      await organizer.onOpen();
       expect(elements(organizer.contentEl).contents()).toContain(scan);
-      plugin.snapshot = result;
-      organizer.render();
+      acceptSnapshot(plugin, result);
       const content = elements(organizer.contentEl).contents();
       expect(content).toContain(language === 'zh' ? '重新扫描' : 'Scan again');
       expect(content).toContain(category);
       expect(content).not.toContain(language === 'zh' ? '操作历史' : 'History');
       expect(content).toContain('Scan vault.png');
 
-      const plan = buildPlan(result, ['b.png'], 'Scan vault.png');
+      const plan = mergePlan(result, ['b.png'], 'Scan vault.png');
       const confirm = vi.fn().mockResolvedValue(undefined);
       const modal = new ConfirmPlanModal(app, plan, confirm);
       modal.onOpen();
@@ -358,7 +364,7 @@ describe('localized plugin surfaces', () => {
     const root = elements(view.contentEl);
     expect(root.contents()).toContain('疑似未引用');
     expect(root.contents()).toContain('请在“待检查”中处理阻塞问题');
-    expect(root.all().find((node) => node.text === '预览合并（1）')?.disabled).toBe(true);
+    expect(root.all().find((node) => node.text === '预览合并（0）')?.disabled).toBe(true);
     root
       .all()
       .find((node) => node.text === '疑似未引用')
@@ -386,29 +392,54 @@ describe('localized plugin surfaces', () => {
         'map.excalidraw.md': drawing([], '## Embedded Files\nfile1: [[used.png]]\n'),
       }),
     );
-    const preview = vi.spyOn(plugin, 'preview').mockImplementation(() => undefined);
+    const preview = vi.spyOn(plugin, 'preview').mockResolvedValue(undefined);
+    acceptSnapshot(plugin, plugin.snapshot!);
     const view = new OrganizerView({ app } as unknown as WorkspaceLeaf, plugin);
-    view.render();
+    await view.onOpen();
     const root = elements(view.contentEl);
-    const select = root.all().find((node) => node.tag === 'select')!;
-    const button = root.all().find((node) => node.text === '预览合并（1）')!;
+    const key = duplicateGroupKey(plugin.snapshot!.duplicates[0]!);
+    let select = root.all().find((node) => node.dataset.focusKey === `keep:${key}`)!;
     expect(select.value).toBe('used.png');
+    expect(root.all().find((node) => node.text === '预览合并（0）')?.disabled).toBe(true);
+    plugin.selection.setGroupSelected(key, ['a.png'], true);
+    const button = root.all().find((node) => node.text === '预览合并（1）')!;
     expect(button.disabled).toBe(false);
     button.onclick?.();
-    expect(preview).toHaveBeenCalledWith(['a.png'], 'used.png');
+    expect(preview).toHaveBeenCalledWith(
+      view,
+      {
+        scanId: plugin.selection.state.scanId,
+        selectionRevision: plugin.selection.state.selectionRevision,
+        selection: {
+          kind: 'merge-exact',
+          groupKey: key,
+          keepPath: 'used.png',
+          retirePaths: ['a.png'],
+        },
+      },
+      true,
+    );
+    select = root.all().find((node) => node.dataset.focusKey === `keep:${key}`)!;
     select.value = 'a.png';
     select.onchange?.();
-    expect(button.disabled).toBe(true);
-    expect(root.contents()).toContain('当前保留方案下没有可回收的重复副本');
+    expect(root.all().find((node) => node.text === '预览合并（0）')?.disabled).toBe(true);
+    root
+      .all()
+      .find((node) => node.dataset.focusKey === `expand:${key}`)!
+      .onclick?.();
+    expect(root.contents()).toContain('绘图引用仅支持读取');
+    expect(root.all().find((node) => node.dataset.focusKey === 'image:used.png')?.disabled).toBe(
+      true,
+    );
   });
   it('allows immediate selection and drops stale selections after a new scan', async () => {
     host.language = 'zh';
     const plugin = new AttachmentAtlas(app, {} as PluginManifest);
     const vault = new MemoryVault({ 'unused.png': PNG });
-    plugin.snapshot = await snapshot(vault);
-    const preview = vi.spyOn(plugin, 'preview').mockImplementation(() => undefined);
+    acceptSnapshot(plugin, await snapshot(vault));
+    const preview = vi.spyOn(plugin, 'preview').mockResolvedValue(undefined);
     const view = new OrganizerView({ app } as unknown as WorkspaceLeaf, plugin);
-    view.render();
+    await view.onOpen();
     const root = elements(view.contentEl);
     root
       .all()
@@ -422,10 +453,17 @@ describe('localized plugin surfaces', () => {
     const button = root.all().find((node) => node.text === '预览回收（1）')!;
     expect(button.disabled).toBe(false);
     button.onclick?.();
-    expect(preview).toHaveBeenCalledWith(['unused.png']);
+    expect(preview).toHaveBeenCalledWith(
+      view,
+      {
+        scanId: plugin.selection.state.scanId,
+        selectionRevision: plugin.selection.state.selectionRevision,
+        selection: { kind: 'recycle-unreferenced', retirePaths: ['unused.png'] },
+      },
+      true,
+    );
     vault.files.set('note.md', new TextEncoder().encode('![[unused.png]]').buffer);
-    plugin.snapshot = await snapshot(vault);
-    view.render();
+    acceptSnapshot(plugin, await snapshot(vault));
     expect(root.all().find((node) => node.text === '预览回收（0）')?.disabled).toBe(true);
   });
 });

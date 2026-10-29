@@ -2,11 +2,10 @@ import { describe, expect, it } from 'vitest';
 import LZString from 'lz-string';
 import { parseSource, resolveReference, rewrite } from '../src/references';
 import { decompressScene } from '../src/references/excalidraw-compression';
-import { buildPlan } from '../src/application/plan';
 import { OperationService } from '../src/application/execute';
 import { digest, textBytes, type Source } from '../src/domain/model';
 import { drawing } from './excalidraw-fixtures';
-import { MemoryVault, PNG, snapshot } from './helpers';
+import { MemoryVault, PNG, mergePlan, recyclePlan, snapshot } from './helpers';
 
 describe('bounded Excalidraw decompression', () => {
   it.each([
@@ -47,10 +46,10 @@ describe('read-only Excalidraw reference indexing', () => {
       expect(used.reasons).toContain(
         'Referenced by an Excalidraw drawing. Retain this image; drawing references are read-only.',
       );
-      expect(() => buildPlan(result, ['used.png'], 'other.png')).toThrow('read-only');
-      expect(() => buildPlan(result, ['used.png'])).toThrow();
+      expect(() => mergePlan(result, ['used.png'], 'other.png')).toThrow('read-only');
+      expect(() => recyclePlan(result, ['used.png'])).toThrow();
       // Retaining the drawing's attachment permits unrelated duplicate copies to be merged.
-      const plan = buildPlan(result, ['other.png'], 'used.png');
+      const plan = mergePlan(result, ['other.png'], 'used.png');
       const operations = new OperationService(vault, digest);
       await operations.execute(plan, result);
       expect(await vault.readText('map.excalidraw.md')).toBe(text);
@@ -63,7 +62,7 @@ describe('read-only Excalidraw reference indexing', () => {
     const vault = new MemoryVault({ 'unused.png': PNG, 'map.excalidraw.md': text });
     const result = await snapshot(vault);
     expect(result.blockers).toEqual([]);
-    const plan = buildPlan(result, ['unused.png']);
+    const plan = recyclePlan(result, ['unused.png']);
     await new OperationService(vault, digest).execute(plan, result);
     expect(vault.removed).toEqual(['unused.png']);
     expect(await vault.readText('map.excalidraw.md')).toBe(text);
@@ -137,12 +136,12 @@ describe('read-only Excalidraw reference indexing', () => {
       new MemoryVault({ 'unused.png': PNG, 'map.excalidraw.md': text }),
     );
     expect(result.blockers).not.toEqual([]);
-    expect(() => buildPlan(result, ['unused.png'])).toThrow('coverage');
+    expect(() => recyclePlan(result, ['unused.png'])).toThrow('coverage');
   });
   it('rechecks drawings changed after preview before removing any image', async () => {
     const vault = new MemoryVault({ 'unused.png': PNG, 'map.excalidraw.md': drawing() });
     const result = await snapshot(vault);
-    const plan = buildPlan(result, ['unused.png']);
+    const plan = recyclePlan(result, ['unused.png']);
     vault.files.set(
       'map.excalidraw.md',
       textBytes(drawing([], '## Embedded Files\nfile1: [[unused.png]]\n')),

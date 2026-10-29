@@ -8,7 +8,7 @@ async function replace(text: string, path = 'note.md'): Promise<string> {
     reference.target = 'old.png';
   });
   const source: Source = { ...parsed, path, text, digest: await digest(textBytes(text)) };
-  return rewrite(source, new Map([['old.png', 'assets/new image.png']]));
+  return rewrite(source, new Map([['old.png', 'assets/new image.png']])).text;
 }
 describe('source-aware reference rewriting', () => {
   it.each([
@@ -83,7 +83,7 @@ describe('source-aware reference rewriting', () => {
     });
     const source: Source = { ...parsed, path, text, digest: '' };
     const replacements = new Map([['old.png', 'assets/new image.png']]);
-    const after = rewrite(source, replacements);
+    const after = rewrite(source, replacements).text;
     expect(parsed.references).toHaveLength(2);
     expect(after).toBe(expected);
     expect(() =>
@@ -219,7 +219,7 @@ describe('path resolution', () => {
       ref.target = resolveReference(ref, ['old.png', 'new.png']).target;
     const source: Source = { ...parsed, path: 'map.canvas', text, digest: '' };
     const replacements = new Map([['old.png', 'new.png']]);
-    const after = rewrite(source, replacements);
+    const after = rewrite(source, replacements).text;
     expect(after).toContain('weread://bestbookmark?id=123');
     expect(after).toContain('![[new.png]]');
     expect(() =>
