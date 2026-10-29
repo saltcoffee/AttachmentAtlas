@@ -2,7 +2,8 @@ import { t, problem } from './ui/i18n';
 import { Notice, Plugin } from 'obsidian';
 import { DEFAULT_SETTINGS, type Plan, type Settings, type Snapshot } from './domain/model';
 import { scan } from './application/scan';
-import { buildPlan } from './application/plan';
+import type { PlanRequest } from './application/plan';
+import { OrganizerSelection } from './application/organizer-selection';
 import { OperationService } from './application/execute';
 import { ObsidianVault } from './infrastructure/obsidian-vault';
 import { HashClient } from './infrastructure/hash-client';
@@ -11,18 +12,28 @@ import { OrganizerView, VIEW_TYPE } from './ui/organizer-view';
 import { AtlasSettingsTab } from './ui/settings-tab';
 import { ConfirmPlanModal } from './ui/modals';
 import { errorDetail, type Text } from './domain/messages';
+import { PlanClient } from './infrastructure/plan-client';
 export default class AttachmentAtlas extends Plugin {
   settings: Settings = structuredClone(DEFAULT_SETTINGS);
   snapshot: Snapshot | null = null;
+  readonly selection = new OrganizerSelection();
   status: Text = 'Ready to scan. All processing stays inside this vault.';
   lastError: Text = '';
   busy = false;
+  previewing = false;
+  previewError: Text = '';
   private revision = 0;
   private controller: AbortController | null = null;
   private hashes = new HashClient();
+  private plans = new PlanClient();
   private vaultPort!: ObsidianVault;
   private operations!: OperationService;
   private refreshTimer: number | null = null;
+  private previewToken = 0;
+  private previewModal: ConfirmPlanModal | null = null;
+  private previewSource: OrganizerView | null = null;
+  private retryRequest: PlanRequest | null = null;
+  private unsubscribeSelection: (() => void) | null = null;
   async onload(): Promise<void> {
     const loaded = loadState(await this.loadData());
     this.settings = loaded.settings;
@@ -32,6 +43,9 @@ export default class AttachmentAtlas extends Plugin {
       );
     this.vaultPort = new ObsidianVault(this.app);
     this.operations = new OperationService(this.vaultPort, this.hashes.hash);
+    this.unsubscribeSelection = this.selection.subscribe(() => {
+      this.invalidatePreview();
+    });
     this.registerView(VIEW_TYPE, (leaf) => new OrganizerView(leaf, this));
     this.addSettingTab(new AtlasSettingsTab(this.app, this));
     this.addRibbonIcon('images', t('Open Attachment Atlas'), () => {
@@ -67,11 +81,15 @@ export default class AttachmentAtlas extends Plugin {
   }
   onunload(): void {
     this.cancel();
+    this.unsubscribeSelection?.();
+    this.invalidatePreview();
     this.hashes.dispose();
     if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
   }
   private invalidate(): void {
     this.revision++;
+    this.selection.invalidate();
+    this.invalidatePreview();
     if (!this.busy && this.snapshot) {
       this.snapshot = null;
       this.status = 'Vault changed. Scan again before planning changes.';
@@ -110,6 +128,8 @@ export default class AttachmentAtlas extends Plugin {
     this.busy = true;
     this.lastError = '';
     this.snapshot = null;
+    const scanId = this.selection.beginScan();
+    this.invalidatePreview();
     this.controller = new AbortController();
     this.refresh();
     const revision = this.revision;
@@ -121,6 +141,8 @@ export default class AttachmentAtlas extends Plugin {
         progress: (message) => this.progress(message),
       });
       if (revision !== this.revision) throw new Error('Vault changed during scanning. Scan again.');
+      if (!this.selection.acceptSnapshot(scanId, result))
+        throw new Error('Scan results expired. Scan again.');
       this.snapshot = result;
       this.status = 'Scan complete.';
     } catch (error) {
@@ -134,15 +156,134 @@ export default class AttachmentAtlas extends Plugin {
   cancel(): void {
     this.controller?.abort();
   }
-  preview(paths: string[], keep?: string): void {
+  async preview(view: OrganizerView, request: PlanRequest, queryValid = true): Promise<void> {
+    let token = 0;
     try {
       if (!this.snapshot || this.busy) return;
+      if (!queryValid || !view.canPreview()) return;
+      if (!this.app.workspace.getLeavesOfType(VIEW_TYPE).some((leaf) => leaf.view === view))
+        throw new Error('The organizer view that requested this preview is no longer open.');
       const snapshot = this.snapshot,
-        plan = buildPlan(snapshot, paths, keep);
-      new ConfirmPlanModal(this.app, plan, () => this.execute(plan, snapshot)).open();
+        state = this.selection.state;
+      if (
+        state.scanId <= 0 ||
+        request.scanId !== state.scanId ||
+        request.selectionRevision !== state.selectionRevision
+      )
+        throw new Error('Selection changed. Review the current selection before previewing.');
+      if (!this.selectionMatches(request.selection, state.groups, state.unreferencedPaths))
+        throw new Error('Selection changed. Review the current selection before previewing.');
+      this.invalidatePreview();
+      token = ++this.previewToken;
+      const scanId = state.scanId,
+        selectionRevision = state.selectionRevision;
+      const independentRequest = structuredClone(request);
+      this.previewSource = view;
+      this.retryRequest = independentRequest;
+      this.previewing = true;
+      this.refresh();
+      // Let the loading state paint before structured cloning the snapshot to the worker.
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      const current = () =>
+        token === this.previewToken &&
+        this.snapshot === snapshot &&
+        scanId === this.selection.state.scanId &&
+        selectionRevision === this.selection.state.selectionRevision &&
+        snapshot.revision === this.revision &&
+        !this.busy &&
+        view.canPreview() &&
+        this.app.workspace.getLeavesOfType(VIEW_TYPE).some((leaf) => leaf.view === view);
+      if (!current()) {
+        if (token === this.previewToken) this.cancelPreview(false);
+        return;
+      }
+      const plan = await this.plans.build(snapshot, independentRequest.selection);
+      if (!current()) {
+        if (token === this.previewToken) this.cancelPreview(false);
+        return;
+      }
+      this.previewing = false;
+      this.previewModal = new ConfirmPlanModal(
+        this.app,
+        plan,
+        () => this.confirmPreview(token, scanId, selectionRevision, plan, snapshot),
+        (confirmed) => {
+          if (this.previewToken === token && !confirmed) {
+            const dismissedToken = ++this.previewToken;
+            this.previewModal = null;
+            this.previewSource = null;
+            this.retryRequest = null;
+            window.requestAnimationFrame(() => {
+              if (dismissedToken === this.previewToken)
+                view.focusPreview(independentRequest.selection);
+            });
+          }
+        },
+      );
+      this.refresh();
+      this.previewModal.open();
     } catch (error) {
-      this.fail(error);
+      if (token && token !== this.previewToken) return;
+      if (!token && (this.previewing || this.previewModal)) {
+        new Notice(problem(errorDetail(error)), 8000);
+        return;
+      }
+      this.previewing = false;
+      this.previewError = errorDetail(error);
+      if (!token) {
+        this.previewSource = view;
+        this.retryRequest = structuredClone(request);
+      }
+      new Notice(problem(this.previewError), 8000);
+      this.refresh();
     }
+  }
+  cancelPreview(returnFocus = true): void {
+    const source = this.previewSource,
+      request = this.retryRequest;
+    this.invalidatePreview();
+    this.refresh();
+    if (returnFocus && source && request) source.focusPreview(request.selection);
+  }
+  previewQueryChanged(view: OrganizerView): void {
+    if (this.previewSource === view && this.previewing && !view.canPreview())
+      this.cancelPreview(false);
+  }
+  previewViewClosed(view: OrganizerView): void {
+    if (this.previewSource === view) this.cancelPreview(false);
+  }
+  canRetryPreview(view: OrganizerView): boolean {
+    return (
+      this.previewSource === view && view.canPreview() && !!this.retryRequest && !!this.previewError
+    );
+  }
+  retryPreview(view: OrganizerView): void {
+    if (this.canRetryPreview(view) && this.retryRequest)
+      void this.preview(view, this.retryRequest, view.canPreview());
+  }
+  private async confirmPreview(
+    token: number,
+    scanId: number,
+    selectionRevision: number,
+    plan: Plan,
+    snapshot: Snapshot,
+  ): Promise<void> {
+    const state = this.selection.state;
+    if (
+      token !== this.previewToken ||
+      scanId !== state.scanId ||
+      selectionRevision !== state.selectionRevision ||
+      plan.revision !== this.revision ||
+      this.busy ||
+      !this.previewModal
+    ) {
+      return;
+    }
+    this.previewToken++;
+    this.previewModal = null;
+    this.previewSource = null;
+    this.retryRequest = null;
+    await this.execute(plan, snapshot);
   }
   private async execute(plan: Plan, snapshot: Snapshot): Promise<void> {
     if (this.busy) return;
@@ -151,6 +292,7 @@ export default class AttachmentAtlas extends Plugin {
       return;
     }
     this.busy = true;
+    this.selection.invalidate();
     this.lastError = '';
     this.controller = new AbortController();
     this.refresh();
@@ -177,5 +319,33 @@ export default class AttachmentAtlas extends Plugin {
     this.settings = settingsFrom(value);
     await this.saveState();
     this.invalidate();
+  }
+  private invalidatePreview(): void {
+    this.previewToken++;
+    this.plans.cancel();
+    this.previewing = false;
+    this.previewError = '';
+    this.previewSource = null;
+    this.retryRequest = null;
+    const modal = this.previewModal;
+    this.previewModal = null;
+    modal?.close();
+  }
+  private selectionMatches(
+    request: PlanRequest['selection'],
+    groups: Readonly<Record<string, { keepPath: string; retirePaths: readonly string[] }>>,
+    unreferencedPaths: readonly string[],
+  ): boolean {
+    const samePaths = (left: readonly string[], right: readonly string[]) =>
+      left.length === right.length && left.every((path) => right.includes(path));
+    if (request.kind === 'merge-exact') {
+      const current = groups[request.groupKey];
+      return (
+        !!current &&
+        current.keepPath === request.keepPath &&
+        samePaths(current.retirePaths, request.retirePaths)
+      );
+    }
+    return samePaths(unreferencedPaths, request.retirePaths);
   }
 }

@@ -1,4 +1,11 @@
-import { assert, type EditableReference, type Reference, type Source } from '../domain/model';
+import {
+  assert,
+  type EditableReference,
+  type Reference,
+  type ReferenceEdit,
+  type Source,
+  type SourcePatch,
+} from '../domain/model';
 import { basename, dirname, vaultPath } from '../domain/paths';
 import { parseCanvas } from './canvas';
 import { parseMarkdown } from './markdown';
@@ -72,44 +79,75 @@ function targetText(reference: Reference, path: string): string {
     .join('/');
   return `/${encoded}`;
 }
-interface Patch {
-  start: number;
-  end: number;
-  value: string;
+export interface RewriteResult {
+  readonly text: string;
+  readonly patches: readonly SourcePatch[];
+  readonly edits: readonly ReferenceEdit[];
 }
-function apply(text: string, patches: Patch[]): string {
+export function applySourcePatches(text: string, patches: readonly SourcePatch[]): string {
   let previous = text.length;
-  for (const patch of patches.sort((a, b) => b.start - a.start)) {
-    assert(patch.end <= previous && patch.start <= patch.end, 'Overlapping reference patches.');
+  for (const patch of [...patches].sort((a, b) => b.start - a.start)) {
+    assert(
+      Number.isSafeInteger(patch.start) &&
+        Number.isSafeInteger(patch.end) &&
+        patch.start >= 0 &&
+        patch.end <= previous &&
+        patch.start <= patch.end,
+      'Overlapping or invalid reference patches.',
+    );
     text = text.slice(0, patch.start) + patch.value + text.slice(patch.end);
     previous = patch.start;
   }
   return text;
 }
-export function rewrite(source: Source, replacements: Map<string, string>): string {
-  const patches: Patch[] = [];
+export function rewrite(source: Source, replacements: Map<string, string>): RewriteResult {
+  const patches: SourcePatch[] = [],
+    edits: ReferenceEdit[] = [];
   const nested = new Map<
     number,
-    { outer: NonNullable<EditableReference['outer']>; patches: Patch[] }
+    { outer: NonNullable<EditableReference['outer']>; patches: SourcePatch[] }
   >();
   for (const ref of source.references) {
     const target = replacements.get(ref.target);
-    if (!target) continue;
+    if (!target || target === ref.target) continue;
     assert(!ref.readOnly, 'Excalidraw references are read-only. Retain the referenced image.');
     const patch = { start: ref.start, end: ref.end, value: targetText(ref, target) };
     if (ref.outer) {
       const group = nested.get(ref.outer.start) ?? { outer: ref.outer, patches: [] };
+      assert(
+        group.outer.end === ref.outer.end && group.outer.text === ref.outer.text,
+        'Canvas reference location metadata is inconsistent.',
+      );
       group.patches.push(patch);
       nested.set(ref.outer.start, group);
-    } else patches.push(patch);
+      edits.push({
+        location: {
+          kind: 'canvas-text',
+          outerStart: ref.outer.start,
+          outerEnd: ref.outer.end,
+          start: ref.start,
+          end: ref.end,
+        },
+        beforeTarget: ref.target,
+        afterTarget: target,
+      });
+    } else {
+      patches.push(patch);
+      edits.push({
+        location: { kind: 'source', start: ref.start, end: ref.end },
+        beforeTarget: ref.target,
+        afterTarget: target,
+      });
+    }
   }
   for (const { outer, patches: inner } of nested.values())
     patches.push({
       start: outer.start,
       end: outer.end,
-      value: JSON.stringify(apply(outer.text, inner)),
+      value: JSON.stringify(applySourcePatches(outer.text, inner)),
     });
-  return apply(source.text, patches);
+  const text = applySourcePatches(source.text, patches);
+  return { text, patches, edits };
 }
 export function verifyTargets(
   before: Source[],

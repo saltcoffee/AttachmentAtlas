@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { digest } from '../src/domain/model';
-import { buildPlan } from '../src/application/plan';
 import { OperationService } from '../src/application/execute';
-import { MemoryVault, PNG, snapshot } from './helpers';
+import { MemoryVault, PNG, mergePlan, recyclePlan, snapshot } from './helpers';
 
 describe('referenced-image recycling safety', () => {
   it.each([
@@ -23,11 +22,11 @@ describe('referenced-image recycling safety', () => {
     expect(result.blockers).toEqual([]);
     expect(image.reasons).toEqual([]);
     expect(image.references).toHaveLength(1);
-    expect(() => buildPlan(result, [path])).toThrow('Image is referenced');
+    expect(() => recyclePlan(result, [path])).toThrow('Image is referenced');
     expect(vault.removed).toEqual([]);
 
     const service = new OperationService(vault, digest);
-    const plan = buildPlan(result, [path], 'keep.png');
+    const plan = mergePlan(result, [path], 'keep.png');
     await service.execute(plan, result);
     expect(await vault.exists(path)).toBe(false);
     expect(await vault.readText(source)).toContain('/keep.png');

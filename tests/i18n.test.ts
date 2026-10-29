@@ -84,6 +84,7 @@ describe('message boundaries and catalogue coverage', () => {
   it('covers plugin messages and prevents untranslated UI literals from being introduced', () => {
     const root = fileURLToPath(new URL('../src/', import.meta.url));
     const templates = new Set<string>();
+    const productionLiterals = new Set<string>();
     const inspectText = (node: ts.Expression | undefined) => {
       if (!node) return;
       if (ts.isStringLiteral(node)) templates.add(node.text);
@@ -92,14 +93,37 @@ describe('message boundaries and catalogue coverage', () => {
         inspectText(node.whenFalse);
       }
     };
+    // Focus keys and DOM identifiers are metadata. Inspect templates at visible-text
+    // boundaries so those identifiers do not get mistaken for untranslated copy.
+    const isVisibleTemplate = (node: ts.Node): boolean => {
+      for (let parent = node.parent; parent; parent = parent.parent) {
+        if (
+          ts.isPropertyAssignment(parent) &&
+          ['text', 'placeholder', 'aria-label', 'title', 'alt'].includes(
+            parent.name.getText().replaceAll("'", ''),
+          )
+        )
+          return true;
+        if (
+          ts.isCallExpression(parent) &&
+          (['t', 'message'].includes(parent.expression.getText()) ||
+            parent.expression.getText().endsWith('.setText'))
+        )
+          return true;
+        if (ts.isNewExpression(parent) && parent.expression.getText() === 'Notice') return true;
+        if (ts.isStatement(parent)) break;
+      }
+      return false;
+    };
     const walk = (folder: string) => {
       for (const entry of readdirSync(folder, { withFileTypes: true })) {
         const path = `${folder}/${entry.name}`;
         if (entry.isDirectory()) {
-          if (entry.name !== 'i18n') walk(path);
+          walk(path);
           continue;
         }
         if (!path.endsWith('.ts')) continue;
+        if (path.endsWith('/i18n/zh.ts') || path.endsWith('/i18n/zh-diagnostics.ts')) continue;
         const source = ts.createSourceFile(
           path,
           readFileSync(path, 'utf8'),
@@ -107,6 +131,8 @@ describe('message boundaries and catalogue coverage', () => {
           true,
         );
         const visit = (node: ts.Node) => {
+          if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))
+            productionLiterals.add(node.text);
           if (ts.isCallExpression(node)) {
             const name = node.expression.getText(source);
             if (['t', 'message'].includes(name)) inspectText(node.arguments[0]);
@@ -143,7 +169,7 @@ describe('message boundaries and catalogue coverage', () => {
             ) {
               expect(ts.isStringLiteral(node.initializer), `${path}: raw UI text`).toBe(false);
             }
-            if (ts.isTemplateExpression(node)) {
+            if (ts.isTemplateExpression(node) && isVisibleTemplate(node)) {
               for (const part of [
                 node.head.text,
                 ...node.templateSpans.map((span) => span.literal.text),
@@ -159,6 +185,24 @@ describe('message boundaries and catalogue coverage', () => {
     walk(root);
     templates.delete('');
     expect([...templates].filter((template) => !Object.hasOwn(zh, template))).toEqual([]);
+    const catalog = ts.createSourceFile(
+      'zh.ts',
+      readFileSync(`${root}/i18n/zh.ts`, 'utf8'),
+      ts.ScriptTarget.Latest,
+      true,
+    );
+    const unused: string[] = [];
+    const inspectCatalog = (node: ts.Node) => {
+      if (
+        ts.isPropertyAssignment(node) &&
+        (ts.isStringLiteral(node.name) || ts.isIdentifier(node.name)) &&
+        !productionLiterals.has(node.name.text)
+      )
+        unused.push(node.name.text);
+      ts.forEachChild(node, inspectCatalog);
+    };
+    inspectCatalog(catalog);
+    expect(unused, 'Unused UI catalogue entries').toEqual([]);
   });
   it('localizes actual scan blockers, image protection, and progress without mutating vault data', async () => {
     const vault = new MemoryVault({

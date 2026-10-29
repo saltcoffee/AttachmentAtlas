@@ -1,20 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS, digest, textBytes } from '../src/domain/model';
-import { buildPlan } from '../src/application/plan';
 import { scan, unreferencedReasons } from '../src/application/scan';
 import { OperationService } from '../src/application/execute';
 import { loadState } from '../src/infrastructure/settings';
-import { MemoryVault, PNG, snapshot } from './helpers';
+import { MemoryVault, PNG, mergePlan, recyclePlan, snapshot } from './helpers';
 describe('scan and plans', () => {
   it('recycles a newly created, unreferenced image immediately', async () => {
     const vault = new MemoryVault({ 'unused.png': PNG });
-    vault.list = () => [{ path: 'unused.png', size: PNG.byteLength, mtime: Date.now() }];
+    const list = vault.list.bind(vault);
+    vault.list = () => list().map((file) => ({ ...file, mtime: Date.now() }));
     const result = await scan(vault, digest, {
       revision: 1,
       settings: DEFAULT_SETTINGS,
     });
     expect(unreferencedReasons(result.media[0]!, result)).toEqual([]);
-    const plan = buildPlan(result, ['unused.png']);
+    const plan = recyclePlan(result, ['unused.png']);
     expect(plan.kind).toBe('recycle-unreferenced');
     const operations = new OperationService(vault, digest);
     await operations.execute(plan, result);
@@ -46,7 +46,7 @@ describe('scan and plans', () => {
     const result = await snapshot(vault);
     expect(result.blockers).toHaveLength(1);
     expect(result.media[0]?.reasons).not.toHaveLength(0);
-    expect(() => buildPlan(result, ['unused.png'])).toThrow();
+    expect(() => recyclePlan(result, ['unused.png'])).toThrow();
   });
   it('does not confuse equal size with exact duplicates', async () => {
     const different = PNG.slice(0);
@@ -80,7 +80,7 @@ describe('scan and plans', () => {
       'note.md': '![[a.png]] ![[b.png]]',
     });
     const result = await snapshot(vault);
-    const plan = buildPlan(result, ['folder/b.png'], 'a.png');
+    const plan = mergePlan(result, ['folder/b.png'], 'a.png');
     expect(plan.documents).toHaveLength(1);
   });
 });
@@ -94,7 +94,7 @@ describe('execution with native trash', () => {
       'second.md': '![[c.png]]',
     });
     const result = await snapshot(vault);
-    const plan = buildPlan(result, ['b.png', 'c.png'], 'keep.png');
+    const plan = mergePlan(result, ['b.png', 'c.png'], 'keep.png');
     const service = new OperationService(vault, digest);
     return { vault, service, result, plan };
   }
@@ -110,7 +110,7 @@ describe('execution with native trash', () => {
       settings: { scope: 'imports', preferredFolder: 'canonical', protectedPaths: ['canonical'] },
     });
     await new OperationService(vault, digest).execute(
-      buildPlan(result, ['imports/b.png'], 'canonical/a.png'),
+      mergePlan(result, ['imports/b.png'], 'canonical/a.png'),
       result,
     );
     expect(await vault.readBinary('canonical/a.png')).toEqual(PNG);
@@ -136,7 +136,7 @@ describe('execution with native trash', () => {
     const hidden = '.private-fixture/existing/original.bin';
     const vault = new MemoryVault({ 'unused.png': PNG, [hidden]: PNG, 'note.md': 'No images.' });
     const result = await snapshot(vault);
-    await new OperationService(vault, digest).execute(buildPlan(result, ['unused.png']), result);
+    await new OperationService(vault, digest).execute(recyclePlan(result, ['unused.png']), result);
     expect(vault.removed).toEqual(['unused.png']);
     expect([...vault.files.keys()]).toEqual([hidden, 'note.md']);
     expect(await vault.readBinary(hidden)).toEqual(PNG);
@@ -182,7 +182,7 @@ describe('execution with native trash', () => {
   it('stops on a late source and keeps all originals', async () => {
     const { vault, service, plan, result } = await setup();
     vault.onProcess = () => vault.files.set('new.md', textBytes('![[b.png]]'));
-    await expect(service.execute(plan, result)).rejects.toThrow('inventory changed');
+    await expect(service.execute(plan, result)).rejects.toThrow('Active vault files changed');
     expect(vault.removed).toEqual([]);
     expect(await vault.readText('new.md')).toBe('![[b.png]]');
   });
@@ -200,7 +200,7 @@ describe('execution with native trash', () => {
     expect(service.busy).toBe(false);
     vault.onRemove = undefined;
     const fresh = await snapshot(vault);
-    await service.execute(buildPlan(fresh, ['c.png'], 'keep.png'), fresh);
+    await service.execute(mergePlan(fresh, ['c.png'], 'keep.png'), fresh);
     expect(vault.removed).toEqual(['b.png', 'c.png']);
   });
 

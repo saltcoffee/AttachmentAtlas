@@ -43,6 +43,25 @@ export interface Source {
   references: Reference[];
   hints: string[];
 }
+export interface SourcePatch {
+  readonly start: number;
+  readonly end: number;
+  readonly value: string;
+}
+export type ReferenceLocation =
+  | { readonly kind: 'source'; readonly start: number; readonly end: number }
+  | {
+      readonly kind: 'canvas-text';
+      readonly outerStart: number;
+      readonly outerEnd: number;
+      readonly start: number;
+      readonly end: number;
+    };
+export interface ReferenceEdit {
+  readonly location: ReferenceLocation;
+  readonly beforeTarget: string;
+  readonly afterTarget: string;
+}
 export interface Snapshot {
   revision: number;
   settings: Settings;
@@ -56,6 +75,8 @@ export interface DocumentChange {
   path: string;
   before: string;
   after: string;
+  patches: readonly SourcePatch[];
+  edits: readonly ReferenceEdit[];
 }
 export interface Plan {
   revision: number;
