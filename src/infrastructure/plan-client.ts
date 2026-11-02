@@ -45,7 +45,7 @@ export class PlanClient {
         };
         worker.onerror = () => finish(new Error('Preview worker failed. Try previewing again.'));
         worker.onmessageerror = () => finish(new Error('Invalid preview worker response.'));
-        worker.postMessage({ version: 1, id, snapshot, selection });
+        worker.postMessage({ version: 2, id, snapshot, selection });
       } catch (error) {
         finish(
           error instanceof Error

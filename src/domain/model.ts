@@ -78,14 +78,26 @@ export interface DocumentChange {
   patches: readonly SourcePatch[];
   edits: readonly ReferenceEdit[];
 }
-export interface Plan {
-  revision: number;
-  kind: 'merge-exact' | 'recycle-unreferenced';
-  retire: { path: string; digest: string; size: number }[];
-  keep: { path: string; digest: string }[];
-  documents: DocumentChange[];
-  baseline: { path: string; digest: string }[];
+export interface ImageProof {
+  readonly path: string;
+  readonly digest: string;
+  readonly size: number;
 }
+export interface MergeGroupPlan {
+  readonly groupKey: string;
+  readonly keep: ImageProof;
+  readonly retire: readonly ImageProof[];
+}
+interface PlanBase {
+  readonly revision: number;
+  readonly documents: readonly DocumentChange[];
+  readonly baseline: readonly { readonly path: string; readonly digest: string }[];
+}
+export type Plan = PlanBase &
+  (
+    | { readonly kind: 'merge-exact'; readonly groups: readonly MergeGroupPlan[] }
+    | { readonly kind: 'recycle-unreferenced'; readonly retire: readonly ImageProof[] }
+  );
 export interface VaultPort {
   resolve?(reference: Reference): string | null;
   list(): FileEntry[];

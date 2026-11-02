@@ -4,6 +4,25 @@ Notable user-facing changes are recorded here. Version entries are used as relea
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-11-02
+
+### Added
+
+- Merge explicitly selected copies from multiple duplicate groups with one preview and confirmation. Show global count, byte budgets, and hidden selections, with a shortcut to review selected groups.
+- Preview each group's retained target and copy mappings, and show shared reference documents once with all planned changes.
+- Display the latest session's verified document and image results, including completed, partially completed, unprocessed, and unconfirmed groups. Rescan to review remaining work after a stop.
+
+### Changed
+
+- Use one multi-group plan and execution path for both single-group and batch merges. Write each affected document once before deleting any selected image.
+- Index reference targets and incoming references while retaining actual source reads and retained-image checks at every execution boundary.
+
+### Fixed
+
+- Preserve real IO and verification failures when cancellation is requested during a file action, without counting unconfirmed changes as completed.
+- Validate preview plans against the selected groups and source patches, and reject conflicting or altered plans before writing.
+- Migrate disk benchmarks to the current plan and result contracts; reject failed or cancelled rounds and preserve historical reports.
+
 ## [0.1.6] - 2026-10-29
 
 ### Added

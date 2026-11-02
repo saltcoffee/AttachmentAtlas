@@ -5,6 +5,7 @@ import type { SelectionRequest } from '../application/plan';
 import { OrganizerResults } from './organizer-results';
 import type { Snapshot } from '../domain/model';
 import { bytes } from './modals';
+import { OperationResultView } from './operation-result';
 import { captureFocus, restoreFocus } from './focus';
 import { renderOrganizerFilters, type FilterDrafts } from './organizer-filters';
 import {
@@ -35,6 +36,7 @@ export class OrganizerView extends ItemView {
   private lastScanId = 0;
   private results!: OrganizerResults;
   private previewControls: HTMLElement | null = null;
+  private resultView = new OperationResultView();
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -121,6 +123,13 @@ export class OrganizerView extends ItemView {
       retry.onclick = () => void this.plugin.scanVault();
     }
     this.renderTabs(el);
+    if (this.plugin.result)
+      this.resultView.render(
+        el,
+        this.plugin.result,
+        this.plugin.busy,
+        () => void this.plugin.scanVault(),
+      );
     const snapshot = this.plugin.snapshot;
     if (!snapshot) {
       el.createEl('p', {
@@ -344,10 +353,7 @@ export class OrganizerView extends ItemView {
   }
 
   focusPreview(selection: SelectionRequest): void {
-    const key =
-      selection.kind === 'merge-exact'
-        ? `preview:merge:${selection.groupKey}`
-        : 'preview:unreferenced';
+    const key = selection.kind === 'merge-exact' ? 'preview:merge' : 'preview:unreferenced';
     restoreFocus(this.contentEl, { keys: [key, 'scan'] });
   }
 

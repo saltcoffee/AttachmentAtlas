@@ -117,7 +117,7 @@ export class OrganizerGroupCard {
         ),
       );
       this.renderBudget(selection.retirePaths.length, total);
-      this.renderActions(selection, total, mode, pageMembers);
+      this.renderActions(selection, mode, pageMembers);
       this.updateMembers(selection, this.context.expandedGroups.has(this.key) ? pageMembers : []);
       this.pages.empty();
       if (this.context.expandedGroups.has(this.key))
@@ -209,12 +209,7 @@ export class OrganizerGroupCard {
       });
   }
 
-  private renderActions(
-    selection: GroupSelection,
-    total: number,
-    mode: string,
-    pageMembers: Media[],
-  ): void {
+  private renderActions(selection: GroupSelection, mode: string, pageMembers: Media[]): void {
     this.actions.empty();
     for (const [key, label] of [
       ['matching', 'Matching members'],
@@ -262,30 +257,6 @@ export class OrganizerGroupCard {
     clear.dataset.focusKey = `clear:${this.key}`;
     clear.disabled = this.context.plugin.busy;
     clear.onclick = () => this.context.plugin.selection.clearGroup(this.key);
-    const preview = this.actions.createEl('button', {
-      text: t('Preview merge ({count})', { count: selection.retirePaths.length }),
-      cls: 'mod-cta',
-    });
-    preview.dataset.focusKey = `preview:merge:${this.key}`;
-    const blocker =
-      this.context.writeBlocker(this.context.plugin.snapshot!) ||
-      (!this.context.queryValid() ? t('Correct the size filter before previewing.') : '') ||
-      (!selection.retirePaths.length ? t('Select duplicate copies to preview the merge.') : '') ||
-      (selection.retirePaths.length > MAX_RETIRE_COUNT
-        ? t('Selected images exceed the 100 image limit.')
-        : '') ||
-      (total > MAX_MERGE_RETIRE_BYTES ? t('Selected duplicate copies exceed 192 MiB.') : '');
-    preview.disabled = !!blocker;
-    preview.title = blocker;
-    preview.onclick = () =>
-      this.context.onPreview({
-        kind: 'merge-exact',
-        groupKey: this.key,
-        keepPath: selection.keepPath,
-        retirePaths: [...selection.retirePaths],
-      });
-    if (blocker)
-      this.actions.createSpan({ text: blocker, cls: 'atlas-muted', attr: { role: 'status' } });
   }
 
   private updateMembers(selection: GroupSelection, images: Media[]): void {

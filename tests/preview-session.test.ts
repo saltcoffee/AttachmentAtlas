@@ -1,3 +1,4 @@
+import { ExecutionRecorder } from '../src/application/execution-result';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { App, PluginManifest, WorkspaceLeaf } from 'obsidian';
 import AttachmentAtlas from '../src/main';
@@ -128,7 +129,14 @@ beforeEach(() => {
   });
   host.build.mockReset();
   host.cancel.mockReset();
-  host.execute.mockReset().mockResolvedValue(undefined);
+  host.execute.mockReset().mockImplementation(async (plan: Plan) => {
+    const recorder = new ExecutionRecorder(plan);
+    for (const path of recorder.documents.keys()) recorder.documents.set(path, 'verified');
+    for (const path of recorder.images.keys()) recorder.images.set(path, 'verified');
+    recorder.stage = 'final-verify';
+    recorder.finalVerification = 'passed';
+    return recorder.finish('completed', false);
+  });
   host.modals = [];
 });
 afterEach(() => {

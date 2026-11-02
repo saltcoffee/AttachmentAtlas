@@ -82,6 +82,74 @@ function setup(groupSizes: number[], imageSize = 1024) {
 }
 
 describe('organizer interaction regressions', () => {
+  it('submits all selected groups even when the filter hides every group', () => {
+    const ui = setup([3, 3]);
+    for (const group of ui.groups)
+      ui.selection.setGroupSelected(
+        duplicateGroupKey(group),
+        group.slice(1).map((image) => image.path),
+        true,
+      );
+    ui.state.query = { ...ui.state.query, path: 'no-group-matches' };
+    ui.render();
+    expect(ui.root.contents()).toContain('2 selected groups · 4 copies');
+    expect(ui.root.contents()).toContain('4 outside filter');
+    expect(ui.root.contents()).toContain('4 outside group page');
+    expect(ui.control('preview:merge').disabled).toBe(false);
+    ui.click('preview:merge');
+    expect(ui.onPreview).toHaveBeenCalledExactlyOnceWith({
+      kind: 'merge-exact',
+      groups: ui.groups.map((group) => ({
+        groupKey: duplicateGroupKey(group),
+        keepPath: group[0]!.path,
+        retirePaths: group.slice(1).map((image) => image.path),
+      })),
+    });
+    ui.click('groups:selected');
+    expect(ui.root.all().filter((element) => element.tag === 'h3')).toHaveLength(2);
+  });
+
+  it('applies the count and byte budgets across groups and preserves every choice for adjustment', () => {
+    const ui = setup([62, 62], 2 * 1024 * 1024);
+    for (const group of ui.groups)
+      ui.selection.setGroupSelected(
+        duplicateGroupKey(group),
+        group.slice(1, 61).map((image) => image.path),
+        true,
+      );
+    expect(ui.control('preview:merge').disabled).toBe(true);
+    expect(ui.root.contents()).toContain('Selection exceeds the operation limit by 20 images.');
+    expect(ui.root.contents()).toContain('Selection exceeds the byte limit');
+    const second = ui.groups[1]!;
+    ui.selection.setGroupSelected(
+      duplicateGroupKey(second),
+      second.slice(37, 61).map((image) => image.path),
+      false,
+    );
+    expect(
+      Object.values(ui.selection.state.groups).flatMap((group) => group.retirePaths),
+    ).toHaveLength(96);
+    expect(ui.control('preview:merge').disabled).toBe(false);
+  });
+
+  it('clears all merge selections without changing retained choices or unreferenced drafts', () => {
+    const ui = setup([3, 3]);
+    for (const group of ui.groups) {
+      const key = duplicateGroupKey(group);
+      ui.selection.setKeep(key, group[2]!.path);
+      ui.selection.setGroupSelected(key, [group[1]!.path], true);
+    }
+    ui.selection.setUnreferencedSelected([ui.groups[0]![0]!.path], true);
+    ui.click('merge:clear');
+    expect(Object.values(ui.selection.state.groups).map((group) => group.retirePaths)).toEqual([
+      [],
+      [],
+    ]);
+    expect(Object.values(ui.selection.state.groups).map((group) => group.keepPath)).toEqual(
+      ui.groups.map((group) => group[2]!.path),
+    );
+    expect(ui.selection.state.unreferencedPaths).toEqual([ui.groups[0]![0]!.path]);
+  });
   it('updates a selected member without replacing images, reference details, or another group', () => {
     const ui = setup([3, 3]),
       group = ui.groups[0]!,
@@ -137,7 +205,7 @@ describe('organizer interaction regressions', () => {
     expect(ui.onPreview).not.toHaveBeenCalled();
     stale.mockRestore();
     ui.click(`clear:${key}`);
-    expect(ui.control(`preview:merge:${key}`).disabled).toBe(true);
+    expect(ui.control('preview:merge').disabled).toBe(true);
     expect(ui.control(`keep:${key}`).value).toBe(group[0]!.path);
   });
   it('retains 101 selected copies and submits exactly the remaining 100 after deselection', () => {
@@ -150,25 +218,30 @@ describe('organizer interaction regressions', () => {
       true,
     );
     expect(ui.selection.state.groups[key]!.retirePaths).toHaveLength(101);
-    expect(ui.control(`preview:merge:${key}`).disabled).toBe(true);
+    expect(ui.control('preview:merge').disabled).toBe(true);
     expect(ui.root.contents()).toContain('Selection exceeds the operation limit by 1 images.');
     ui.click('groups:selected');
     ui.click(`expand:${key}`);
     ui.deselect(group[1]!.path);
     expect(ui.selection.state.groups[key]!.retirePaths).toHaveLength(100);
-    expect(ui.control(`preview:merge:${key}`).disabled).toBe(false);
-    ui.click(`preview:merge:${key}`);
+    expect(ui.control('preview:merge').disabled).toBe(false);
+    ui.click('preview:merge');
     expect(ui.onPreview).toHaveBeenCalledExactlyOnceWith({
       kind: 'merge-exact',
-      groupKey: key,
-      keepPath: group[0]!.path,
-      retirePaths: group.slice(2, 102).map((image) => image.path),
+      groups: [
+        {
+          groupKey: key,
+          keepPath: group[0]!.path,
+          retirePaths: group.slice(2, 102).map((image) => image.path),
+        },
+      ],
     });
   });
   it.each([0, 1])(
     'shows exact totals and excess bytes for the merge byte boundary +%i per image',
     (extra) => {
-      const ui = setup([5], 48 * 1024 * 1024 + extra),
+      // Metadata alone covers the total limit without allocating large image buffers.
+      const ui = setup([97], 2 * 1024 * 1024 + extra),
         group = ui.groups[0]!,
         key = duplicateGroupKey(group);
       ui.selection.setGroupSelected(
@@ -176,10 +249,10 @@ describe('organizer interaction regressions', () => {
         group.slice(1).map((image) => image.path),
         true,
       );
-      expect(ui.root.contents()).toContain(`${192 * 1024 * 1024 + extra * 4} bytes`);
-      expect(ui.control(`preview:merge:${key}`).disabled).toBe(extra > 0);
+      expect(ui.root.contents()).toContain(`${192 * 1024 * 1024 + extra * 96} bytes`);
+      expect(ui.control('preview:merge').disabled).toBe(extra > 0);
       if (extra) {
-        expect(ui.root.contents()).toContain('Selection exceeds the byte limit by 4 bytes');
+        expect(ui.root.contents()).toContain('Selection exceeds the byte limit by 96 bytes');
         expect(ui.root.contents()).toContain('Limit: 192.0 MiB (201326592 bytes)');
       }
     },
@@ -308,7 +381,6 @@ describe('lazy plan previews', () => {
     const plan: Plan = {
       revision: 1,
       kind: 'recycle-unreferenced',
-      keep: [],
       documents: [],
       baseline: [],
       retire: ['a.png', 'b.png'].map((path) => ({
@@ -335,7 +407,6 @@ describe('lazy plan previews', () => {
           digest: '',
           size: 1,
         })),
-        keep: [],
         documents: [],
         baseline: [],
       };
@@ -363,8 +434,13 @@ describe('lazy plan previews', () => {
     const plan: Plan = {
       revision: 1,
       kind: 'merge-exact',
-      retire: [{ path: 'b.png', digest: '', size: 1 }],
-      keep: [{ path: 'c.png', digest: '' }],
+      groups: [
+        {
+          groupKey: 'fixture',
+          keep: { path: 'c.png', digest: '', size: 1 },
+          retire: [{ path: 'b.png', digest: '', size: 1 }],
+        },
+      ],
       baseline: [],
       documents: Array.from({ length: 11 }, (_, index) => ({
         path: `${index}.canvas`,

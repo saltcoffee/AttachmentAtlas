@@ -166,14 +166,22 @@ describe('localized plugin surfaces', () => {
     host.notices = [];
   });
   it.each([
-    ['zh', '扫描库内图片', '扫描当前库', '完全重复', '保存设置', '删除 1 张图片', '取消'],
+    [
+      'zh',
+      '扫描库内图片',
+      '扫描当前库',
+      '完全重复',
+      '保存设置',
+      '合并 1 组并删除 1 张图片',
+      '取消',
+    ],
     [
       'en',
       'Scan vault images',
       'Scan vault',
       'Exact duplicates',
       'Save settings',
-      'Delete 1 images',
+      'Merge 1 groups and delete 1 images',
       'Cancel',
     ],
     [
@@ -182,7 +190,7 @@ describe('localized plugin surfaces', () => {
       'Scan vault',
       'Exact duplicates',
       'Save settings',
-      'Delete 1 images',
+      'Merge 1 groups and delete 1 images',
       'Cancel',
     ],
   ])(
@@ -364,7 +372,9 @@ describe('localized plugin surfaces', () => {
     const root = elements(view.contentEl);
     expect(root.contents()).toContain('疑似未引用');
     expect(root.contents()).toContain('请在“待检查”中处理阻塞问题');
-    expect(root.all().find((node) => node.text === '预览合并（0）')?.disabled).toBe(true);
+    expect(root.all().find((node) => node.dataset.focusKey === 'preview:merge')?.disabled).toBe(
+      true,
+    );
     root
       .all()
       .find((node) => node.text === '疑似未引用')
@@ -400,9 +410,11 @@ describe('localized plugin surfaces', () => {
     const key = duplicateGroupKey(plugin.snapshot!.duplicates[0]!);
     let select = root.all().find((node) => node.dataset.focusKey === `keep:${key}`)!;
     expect(select.value).toBe('used.png');
-    expect(root.all().find((node) => node.text === '预览合并（0）')?.disabled).toBe(true);
+    expect(root.all().find((node) => node.dataset.focusKey === 'preview:merge')?.disabled).toBe(
+      true,
+    );
     plugin.selection.setGroupSelected(key, ['a.png'], true);
-    const button = root.all().find((node) => node.text === '预览合并（1）')!;
+    const button = root.all().find((node) => node.dataset.focusKey === 'preview:merge')!;
     expect(button.disabled).toBe(false);
     button.onclick?.();
     expect(preview).toHaveBeenCalledWith(
@@ -412,9 +424,7 @@ describe('localized plugin surfaces', () => {
         selectionRevision: plugin.selection.state.selectionRevision,
         selection: {
           kind: 'merge-exact',
-          groupKey: key,
-          keepPath: 'used.png',
-          retirePaths: ['a.png'],
+          groups: [{ groupKey: key, keepPath: 'used.png', retirePaths: ['a.png'] }],
         },
       },
       true,
@@ -422,7 +432,9 @@ describe('localized plugin surfaces', () => {
     select = root.all().find((node) => node.dataset.focusKey === `keep:${key}`)!;
     select.value = 'a.png';
     select.onchange?.();
-    expect(root.all().find((node) => node.text === '预览合并（0）')?.disabled).toBe(true);
+    expect(root.all().find((node) => node.dataset.focusKey === 'preview:merge')?.disabled).toBe(
+      true,
+    );
     root
       .all()
       .find((node) => node.dataset.focusKey === `expand:${key}`)!

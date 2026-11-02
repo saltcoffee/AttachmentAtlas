@@ -31,18 +31,22 @@ describe('packaged preview worker', () => {
         worker.once('message', settle(resolve));
         worker.once('error', settle(reject));
         worker.postMessage({
-          version: 1,
+          version: 2,
           id: 1,
           snapshot: result,
           selection: {
             kind: 'merge-exact',
-            groupKey: `${PNG.byteLength}:${result.media[0].digest}`,
-            keepPath: 'keep.png',
-            retirePaths: ['copy.png'],
+            groups: [
+              {
+                groupKey: `${PNG.byteLength}:${result.media[0].digest}`,
+                keepPath: 'keep.png',
+                retirePaths: ['copy.png'],
+              },
+            ],
           },
         });
       });
-      expect(response).toEqual({ version: 1, id: 1, ok: true, plan });
+      expect(response).toEqual({ version: 2, id: 1, ok: true, plan });
       expect(plan.documents[0].after).toBe('![中文😀](/keep.png)');
       expect(Object.keys(bundled.metafile.inputs)).not.toContain(
         'node_modules/decode-named-character-reference/index.dom.js',

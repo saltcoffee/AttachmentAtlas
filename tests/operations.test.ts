@@ -1,9 +1,16 @@
+import type { ExecutionResult } from '../src/application/execution-result';
+import { renderMessage } from '../src/domain/messages';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS, digest, textBytes } from '../src/domain/model';
 import { scan, unreferencedReasons } from '../src/application/scan';
 import { OperationService } from '../src/application/execute';
 import { loadState } from '../src/infrastructure/settings';
 import { MemoryVault, PNG, mergePlan, recyclePlan, snapshot } from './helpers';
+async function expectStopped(pending: Promise<ExecutionResult>, reason: string): Promise<void> {
+  const result = await pending;
+  expect(result.outcome).toBe(reason === 'cancelled' ? 'cancelled' : 'failed');
+  expect(renderMessage(result.issue!.detail)).toContain(reason);
+}
 describe('scan and plans', () => {
   it('recycles a newly created, unreferenced image immediately', async () => {
     const vault = new MemoryVault({ 'unused.png': PNG });
@@ -145,7 +152,7 @@ describe('execution with native trash', () => {
   it('rejects a new reference source after preview without modifying files', async () => {
     const { vault, service, plan, result } = await setup();
     vault.files.set('new.md', textBytes('![[b.png]]'));
-    await expect(service.execute(plan, result)).rejects.toThrow('sources changed');
+    await expectStopped(service.execute(plan, result), 'sources changed');
     expect(vault.removed).toEqual([]);
     expect(await vault.readText('first.md')).toBe(plan.documents[0]!.before);
   });
@@ -155,7 +162,7 @@ describe('execution with native trash', () => {
     const changed = PNG.slice(0);
     new Uint8Array(changed)[40] = 10;
     vault.files.set('b.png', changed);
-    await expect(service.execute(plan, result)).rejects.toThrow('Image changed');
+    await expectStopped(service.execute(plan, result), 'Image changed');
     expect(vault.removed).toEqual([]);
   });
 
@@ -164,7 +171,7 @@ describe('execution with native trash', () => {
     vault.onProcess = (path) => {
       if (path === 'second.md') throw new Error('Write denied.');
     };
-    await expect(service.execute(plan, result)).rejects.toThrow('Write denied');
+    await expectStopped(service.execute(plan, result), 'Write denied');
     expect(await vault.readText('first.md')).toBe(plan.documents[0]!.after);
     expect(await vault.readText('second.md')).toBe(plan.documents[1]!.before);
     expect(vault.removed).toEqual([]);
@@ -175,14 +182,14 @@ describe('execution with native trash', () => {
   it('detects a write that did not persist before recycling images', async () => {
     const { vault, service, plan, result } = await setup();
     vault.process = async () => undefined;
-    await expect(service.execute(plan, result)).rejects.toThrow('write verification');
+    await expectStopped(service.execute(plan, result), 'write verification');
     expect(vault.removed).toEqual([]);
   });
 
   it('stops on a late source and keeps all originals', async () => {
     const { vault, service, plan, result } = await setup();
     vault.onProcess = () => vault.files.set('new.md', textBytes('![[b.png]]'));
-    await expect(service.execute(plan, result)).rejects.toThrow('Active vault files changed');
+    await expectStopped(service.execute(plan, result), 'Active vault files changed');
     expect(vault.removed).toEqual([]);
     expect(await vault.readText('new.md')).toBe('![[b.png]]');
   });
@@ -192,7 +199,7 @@ describe('execution with native trash', () => {
     vault.onRemove = (path) => {
       if (path === 'c.png') throw new Error('Trash unavailable.');
     };
-    await expect(service.execute(plan, result)).rejects.toThrow('Trash unavailable');
+    await expectStopped(service.execute(plan, result), 'Trash unavailable');
     expect(vault.removed).toEqual(['b.png']);
     expect(await vault.exists('b.png')).toBe(false);
     expect(await vault.readBinary('c.png')).toEqual(PNG);
@@ -207,7 +214,7 @@ describe('execution with native trash', () => {
   it('keeps later user edits and stops remaining deletions', async () => {
     const { vault, service, plan, result } = await setup();
     vault.onRemove = () => vault.files.set('first.md', textBytes('My later edit'));
-    await expect(service.execute(plan, result)).rejects.toThrow('Document changed');
+    await expectStopped(service.execute(plan, result), 'Document changed');
     expect(await vault.readText('first.md')).toBe('My later edit');
     expect(vault.removed).toEqual(['b.png']);
     expect(await vault.exists('c.png')).toBe(true);
@@ -216,7 +223,7 @@ describe('execution with native trash', () => {
   it('rechecks each image immediately before trashing it', async () => {
     const { vault, service, plan, result } = await setup();
     vault.onRemove = () => vault.files.set('c.png', textBytes('New user file'));
-    await expect(service.execute(plan, result)).rejects.toThrow('Image changed immediately');
+    await expectStopped(service.execute(plan, result), 'Image changed immediately');
     expect(vault.removed).toEqual(['b.png']);
     expect(await vault.readText('c.png')).toBe('New user file');
   });
@@ -224,7 +231,7 @@ describe('execution with native trash', () => {
   it('detects a changed retained image before recycling another duplicate', async () => {
     const { vault, service, plan, result } = await setup();
     vault.onRemove = () => vault.files.set('keep.png', textBytes('Changed retained image'));
-    await expect(service.execute(plan, result)).rejects.toThrow('Retained image changed');
+    await expectStopped(service.execute(plan, result), 'Retained image changed');
     expect(vault.removed).toEqual(['b.png']);
     expect(await vault.exists('c.png')).toBe(true);
   });
@@ -234,7 +241,7 @@ describe('execution with native trash', () => {
     const before = new Map(vault.files);
     const controller = new AbortController();
     controller.abort();
-    await expect(service.execute(plan, result, controller.signal)).rejects.toThrow('cancelled');
+    await expectStopped(service.execute(plan, result, controller.signal), 'cancelled');
     expect(vault.files).toEqual(before);
     expect(service.busy).toBe(false);
   });
@@ -243,7 +250,7 @@ describe('execution with native trash', () => {
     const { vault, service, plan, result } = await setup();
     const controller = new AbortController();
     vault.onProcess = () => controller.abort();
-    await expect(service.execute(plan, result, controller.signal)).rejects.toThrow('cancelled');
+    await expectStopped(service.execute(plan, result, controller.signal), 'cancelled');
     expect(vault.removed).toEqual([]);
     expect(await vault.readText('first.md')).toBe(plan.documents[0]!.after);
     expect(await vault.readText('second.md')).toBe(plan.documents[1]!.before);
@@ -253,7 +260,7 @@ describe('execution with native trash', () => {
     const { vault, service, plan, result } = await setup();
     const controller = new AbortController();
     vault.onRemove = () => controller.abort();
-    await expect(service.execute(plan, result, controller.signal)).rejects.toThrow('cancelled');
+    await expectStopped(service.execute(plan, result, controller.signal), 'cancelled');
     expect(vault.removed).toEqual(['b.png']);
     expect(await vault.exists('b.png')).toBe(false);
     expect(await vault.exists('c.png')).toBe(true);

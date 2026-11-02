@@ -70,9 +70,7 @@ export function mergePlan(
   if (!keep?.digest) throw new Error('Retained image was not fully checked.');
   return buildPlan(snapshot, {
     kind: 'merge-exact',
-    groupKey: `${keep.size}:${keep.digest}`,
-    keepPath,
-    retirePaths,
+    groups: [{ groupKey: `${keep.size}:${keep.digest}`, keepPath, retirePaths }],
   });
 }
 
