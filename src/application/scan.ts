@@ -13,8 +13,9 @@ import {
 } from '../domain/model';
 import { active, basename, imagePath, sourcePath, within } from '../domain/paths';
 import { imageFormat, imageDimensions } from '../domain/image';
-import { parseSource, resolveReference } from '../references';
-import { asMessage, errorDetail, message, type Text } from '../domain/messages';
+import { parseSource, createReferenceResolver } from '../references';
+import { AtlasError, asMessage, errorDetail, message, type Text } from '../domain/messages';
+import { checkCancelled } from './cancellation';
 export interface ScanOptions {
   revision: number;
   settings: Settings;
@@ -36,8 +37,10 @@ export async function scan(
     blockers: Text[] = [];
   let sourceBytes = 0;
   const check = () => {
-    assert(!options.signal?.aborted, 'Scan cancelled.');
+    if (options.signal?.aborted && blockers.length) throw new AtlasError(blockers[0]!);
+    checkCancelled(options.signal);
   };
+  const resolve = createReferenceResolver(fileNames);
   for (const [index, file] of files.entries()) {
     check();
     options.progress?.(
@@ -59,7 +62,7 @@ export async function scan(
       const text = await vault.readText(file.path),
         parsed = parseSource(file.path, text);
       for (const reference of parsed.references) {
-        const result = resolveReference(reference, fileNames);
+        const result = resolve(reference);
         reference.target = result.target;
         if (result.ambiguous)
           blockers.push(
@@ -90,6 +93,14 @@ export async function scan(
       );
     }
   }
+  const incoming = new Map<string, Source['references']>();
+  const hints = sources.flatMap((source) => source.hints);
+  for (const source of sources)
+    for (const reference of source.references) {
+      const list = incoming.get(reference.target) ?? [];
+      list.push(reference);
+      incoming.set(reference.target, list);
+    }
   for (const [index, file] of files.filter((file) => imagePath(file.path)).entries()) {
     check();
     options.progress?.(
@@ -115,6 +126,7 @@ export async function scan(
       );
       fingerprint = await hash(data);
     } catch (error) {
+      if (options.signal?.aborted) throw error;
       reasons.push(errorDetail(error));
     }
     if (!within(file.path, options.settings.scope))
@@ -122,20 +134,16 @@ export async function scan(
     if (options.settings.protectedPaths.some((folder) => within(file.path, folder)))
       reasons.push('Protected path.');
     if (
-      sources.some((source) =>
-        source.hints.some(
-          (hint) =>
-            hint.includes(file.path) ||
-            hint.includes(basename(file.path)) ||
-            hint.includes(encodeURI(file.path)) ||
-            hint.includes(encodeURIComponent(basename(file.path))),
-        ),
+      hints.some(
+        (hint) =>
+          hint.includes(file.path) ||
+          hint.includes(basename(file.path)) ||
+          hint.includes(encodeURI(file.path)) ||
+          hint.includes(encodeURIComponent(basename(file.path))),
       )
     )
       reasons.push('Possible reference in unsupported syntax or plain text.');
-    const references = sources.flatMap((source) =>
-      source.references.filter((reference) => reference.target === file.path),
-    );
+    const references = incoming.get(file.path) ?? [];
     if (references.some((reference) => reference.readOnly))
       reasons.push(
         'Referenced by an Excalidraw drawing. Retain this image; drawing references are read-only.',

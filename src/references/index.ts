@@ -16,41 +16,54 @@ export function resolveReference(
   reference: Reference,
   files: string[],
 ): { target: string; ambiguous: boolean; external: boolean } {
-  let raw = reference.linkpath;
-  if (externalLink(raw)) return { target: '', ambiguous: false, external: true };
-  try {
-    if (reference.style === 'markdown') raw = decodeURIComponent(raw);
-  } catch {
-    return { target: '', ambiguous: true, external: false };
+  return createReferenceResolver(files)(reference);
+}
+export function createReferenceResolver(files: readonly string[]) {
+  const paths = new Set(files),
+    names = new Map<string, string[]>();
+  for (const path of files) {
+    const name = basename(path),
+      matches = names.get(name) ?? [];
+    matches.push(path);
+    names.set(name, matches);
   }
-  if (externalLink(raw)) return { target: '', ambiguous: false, external: true };
-  if (/^[a-z][\w+.-]*:/i.test(raw)) return { target: '', ambiguous: true, external: false };
-  try {
-    const candidates = new Set<string>();
-    if (reference.style === 'json') {
-      const exact = vaultPath(raw);
-      if (files.includes(exact)) candidates.add(exact);
-    } else if (!raw.includes('/') && reference.style === 'wiki') {
-      files.filter((path) => basename(path) === raw).forEach((path) => candidates.add(path));
-    } else {
-      if (!raw.startsWith('/')) {
-        const parent = dirname(reference.source);
-        const relative = vaultPath(parent ? `${parent}/${raw}` : raw);
-        if (files.includes(relative)) candidates.add(relative);
-      }
-      if (!raw.startsWith('../') && !raw.startsWith('./')) {
-        const root = vaultPath(raw.replace(/^\//, ''));
-        if (files.includes(root)) candidates.add(root);
-      }
+  return (reference: Reference): { target: string; ambiguous: boolean; external: boolean } => {
+    let raw = reference.linkpath;
+    if (externalLink(raw)) return { target: '', ambiguous: false, external: true };
+    try {
+      if (reference.style === 'markdown') raw = decodeURIComponent(raw);
+    } catch {
+      return { target: '', ambiguous: true, external: false };
     }
-    return {
-      target: candidates.size === 1 ? [...candidates][0]! : '',
-      ambiguous: candidates.size > 1,
-      external: false,
-    };
-  } catch {
-    return { target: '', ambiguous: true, external: false };
-  }
+    if (externalLink(raw)) return { target: '', ambiguous: false, external: true };
+    if (/^[a-z][\w+.-]*:/i.test(raw)) return { target: '', ambiguous: true, external: false };
+    try {
+      const candidates = new Set<string>();
+      if (reference.style === 'json') {
+        const exact = vaultPath(raw);
+        if (paths.has(exact)) candidates.add(exact);
+      } else if (!raw.includes('/') && reference.style === 'wiki') {
+        (names.get(raw) ?? []).forEach((path) => candidates.add(path));
+      } else {
+        if (!raw.startsWith('/')) {
+          const parent = dirname(reference.source);
+          const relative = vaultPath(parent ? `${parent}/${raw}` : raw);
+          if (paths.has(relative)) candidates.add(relative);
+        }
+        if (!raw.startsWith('../') && !raw.startsWith('./')) {
+          const root = vaultPath(raw.replace(/^\//, ''));
+          if (paths.has(root)) candidates.add(root);
+        }
+      }
+      return {
+        target: candidates.size === 1 ? [...candidates][0]! : '',
+        ambiguous: candidates.size > 1,
+        external: false,
+      };
+    } catch {
+      return { target: '', ambiguous: true, external: false };
+    }
+  };
 }
 export function parseSource(
   path: string,
@@ -156,14 +169,17 @@ export function verifyTargets(
   filesAfter: string[],
   replacements: Map<string, string>,
 ): void {
+  const resolveBefore = createReferenceResolver(filesBefore),
+    resolveAfter = createReferenceResolver(filesAfter);
+  const updatedByPath = new Map(after.map((source) => [source.path, source]));
   for (const source of before) {
-    const updated = after.find((item) => item.path === source.path);
+    const updated = updatedByPath.get(source.path);
     assert(updated, 'Reference source disappeared.');
     const refs = parseSource(source.path, updated.text).references;
     assert(refs.length === source.references.length, 'Reference count changed unexpectedly.');
     for (const [index, ref] of source.references.entries()) {
-      const old = resolveReference(ref, filesBefore),
-        next = resolveReference(refs[index]!, filesAfter);
+      const old = resolveBefore(ref),
+        next = resolveAfter(refs[index]!);
       assert(
         !next.ambiguous && next.target === (replacements.get(old.target) ?? old.target),
         message('Reference target changed unexpectedly: {path}', { path: source.path }),

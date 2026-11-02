@@ -9,6 +9,9 @@ import {
 } from './plan-preview';
 import { captureFocus, restoreFocus } from './focus';
 import { checkedByteTotal } from '../domain/operation-limits';
+import { groupChanges, retiringImages } from '../domain/operation-plan';
+import type { Text } from '../domain/messages';
+import { problem } from './i18n';
 
 export function bytes(size: number): string {
   const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
@@ -27,6 +30,8 @@ export function exactBytes(size: number): string {
 
 export class ConfirmPlanModal extends Modal {
   private pathPage = 0;
+  private groupPage = 0;
+  private groupPathPages = new Map<string, number>();
   private documentPage = 0;
   private segmentPages = new Map<string, number>();
   private editPages = new Map<string, number>();
@@ -45,6 +50,7 @@ export class ConfirmPlanModal extends Modal {
     private plan: Plan,
     private confirm: () => Promise<void>,
     private onDismiss: (confirmed: boolean) => void = () => undefined,
+    private retainedReasons: Readonly<Record<string, readonly Text[]>> = {},
   ) {
     super(app);
     this.valid = plan.documents.every((document) =>
@@ -90,15 +96,15 @@ export class ConfirmPlanModal extends Modal {
         'Images will be deleted according to Obsidian’s “Deleted files” setting: system trash, vault trash, or permanent deletion. Permanently deleted images cannot be restored. Updated references are not automatically restored. Pause edits on other devices during cleanup.',
       ),
     });
-    if (this.plan.keep[0])
-      el.createEl('p', { text: t('Retain: {path}', { path: this.plan.keep[0].path }) });
-    const totalBytes = checkedByteTotal(this.plan.retire.map((image) => image.size)),
+    const retire = retiringImages(this.plan);
+    this.renderGroups(el);
+    const totalBytes = checkedByteTotal(retire.map((image) => image.size)),
       editCount = this.plan.documents.reduce((sum, document) => sum + document.edits.length, 0);
     el.createEl('p', {
       text: t(
         '{count} images · {size} active-image reduction · {documents} documents · {edits} rewritten targets',
         {
-          count: this.plan.retire.length,
+          count: retire.length,
           size: exactBytes(totalBytes),
           documents: this.plan.documents.length,
           edits: editCount,
@@ -121,7 +127,13 @@ export class ConfirmPlanModal extends Modal {
     cancel.dataset.focusKey = 'plan-cancel';
     cancel.onclick = () => this.close();
     const button = actions.createEl('button', {
-      text: t('Delete {count} images', { count: this.plan.retire.length }),
+      text:
+        this.plan.kind === 'merge-exact'
+          ? t('Merge {groups} groups and delete {count} images', {
+              groups: this.plan.groups.length,
+              count: retire.length,
+            })
+          : t('Delete {count} images', { count: retire.length }),
       cls: 'mod-warning',
     });
     button.dataset.focusKey = 'plan-confirm';
@@ -141,27 +153,81 @@ export class ConfirmPlanModal extends Modal {
   }
 
   private renderRetirePaths(el: HTMLElement): void {
+    const retire = retiringImages(this.plan);
     el.createEl('h3', {
-      text: t('Images selected for recycling ({count})', { count: this.plan.retire.length }),
+      text: t('Images selected for recycling ({count})', { count: retire.length }),
     });
     const pageSize = 50,
       start = this.pathPage * pageSize,
-      page = this.plan.retire.slice(start, start + pageSize),
+      page = retire.slice(start, start + pageSize),
       list = el.createEl('ul');
     page.forEach((image) =>
       list.createEl('li', { text: `${image.path} (${exactBytes(image.size)})` }),
     );
-    if (this.plan.retire.length > pageSize)
+    if (retire.length > pageSize)
       this.pagination(
         el,
         this.pathPage,
-        this.plan.retire.length,
+        retire.length,
         pageSize,
         (page) => {
           this.pathPage = page;
           this.render();
         },
         `retire-paths`,
+      );
+  }
+
+  private renderGroups(el: HTMLElement): void {
+    if (this.plan.kind !== 'merge-exact') return;
+    const groups = this.plan.groups;
+    el.createEl('h3', { text: t('Selected duplicate groups ({count})', { count: groups.length }) });
+    for (const group of groups.slice(this.groupPage * 25, (this.groupPage + 1) * 25)) {
+      const row = el.createDiv({ cls: 'atlas-card' }),
+        changes = groupChanges(this.plan, group);
+      row.createEl('p', { text: t('Retain: {path}', { path: group.keep.path }) });
+      for (const reason of this.retainedReasons[group.keep.path] ?? [])
+        row.createEl('p', { text: problem(reason), cls: 'atlas-muted' });
+      row.createEl('p', {
+        text: t(
+          '{count} images · {size} active-image reduction · {documents} documents · {edits} rewritten targets',
+          {
+            count: group.retire.length,
+            size: exactBytes(checkedByteTotal(group.retire.map((image) => image.size))),
+            documents: changes.length,
+            edits: changes.reduce((sum, doc) => sum + doc.edits, 0),
+          },
+        ),
+      });
+      const pathPage = this.groupPathPages.get(group.groupKey) ?? 0;
+      const list = row.createEl('ul');
+      group.retire
+        .slice(pathPage * 50, (pathPage + 1) * 50)
+        .forEach((image) => list.createEl('li', { text: `${image.path} → ${group.keep.path}` }));
+      if (group.retire.length > 50)
+        this.pagination(
+          row,
+          pathPage,
+          group.retire.length,
+          50,
+          (page) => {
+            this.groupPathPages.set(group.groupKey, page);
+            this.render();
+          },
+          `group-paths:${group.groupKey}`,
+        );
+    }
+    if (groups.length > 25)
+      this.pagination(
+        el,
+        this.groupPage,
+        groups.length,
+        25,
+        (page) => {
+          this.groupPage = page;
+          this.render();
+        },
+        'plan-groups',
       );
   }
 
@@ -221,6 +287,16 @@ export class ConfirmPlanModal extends Modal {
   }
 
   private renderDocumentContent(content: HTMLElement, document: DocumentChange): void {
+    if (this.plan.kind === 'merge-exact') {
+      const groups = this.plan.groups.filter((group) =>
+        groupChanges(this.plan, group).some((doc) => doc.path === document.path),
+      );
+      content.createEl('p', {
+        text: t('Retained targets: {paths}', {
+          paths: groups.map((group) => group.keep.path).join(', '),
+        }),
+      });
+    }
     const pathKey = document.path,
       segments = this.segments.get(pathKey) ?? documentSegments(document);
     this.segments.set(pathKey, segments);

@@ -59,25 +59,27 @@ const snapshotSchema: z.ZodType<Snapshot> = z.object({
   duplicates: z.array(z.array(media).min(2)),
 });
 const selectionSchema: z.ZodType<SelectionRequest> = z.discriminatedUnion('kind', [
-  z.object({
-    kind: z.literal('merge-exact'),
-    groupKey: z.string(),
-    keepPath: z.string(),
-    retirePaths: z.array(z.string()),
-  }),
-  z.object({ kind: z.literal('recycle-unreferenced'), retirePaths: z.array(z.string()) }),
+  z
+    .object({
+      kind: z.literal('merge-exact'),
+      groups: z.array(
+        z
+          .object({ groupKey: z.string(), keepPath: z.string(), retirePaths: z.array(z.string()) })
+          .strict(),
+      ),
+    })
+    .strict(),
+  z.object({ kind: z.literal('recycle-unreferenced'), retirePaths: z.array(z.string()) }).strict(),
 ]);
 export const planBuildInput = z.object({
-  version: z.literal(1),
+  version: z.literal(2),
   id: offset.positive(),
   snapshot: snapshotSchema,
   selection: selectionSchema,
 });
-export const planSchema: z.ZodType<Plan> = z.object({
+const imageProof = z.object({ path: z.string(), digest: z.string(), size: offset }).strict();
+const planBase = {
   revision: offset,
-  kind: z.enum(['merge-exact', 'recycle-unreferenced']),
-  retire: z.array(z.object({ path: z.string(), digest: z.string(), size: offset })),
-  keep: z.array(z.object({ path: z.string(), digest: z.string() })),
   baseline: z.array(z.object({ path: z.string(), digest: z.string() })),
   documents: z.array(
     z.object({
@@ -103,11 +105,31 @@ export const planSchema: z.ZodType<Plan> = z.object({
       ),
     }),
   ),
-});
+};
+export const planSchema: z.ZodType<Plan> = z.discriminatedUnion('kind', [
+  z
+    .object({
+      ...planBase,
+      kind: z.literal('merge-exact'),
+      groups: z.array(
+        z
+          .object({
+            groupKey: z.string(),
+            keep: imageProof,
+            retire: z.array(imageProof),
+          })
+          .strict(),
+      ),
+    })
+    .strict(),
+  z
+    .object({ ...planBase, kind: z.literal('recycle-unreferenced'), retire: z.array(imageProof) })
+    .strict(),
+]);
 export const planBuildOutput = z.discriminatedUnion('ok', [
-  z.object({ version: z.literal(1), id: offset.positive(), ok: z.literal(true), plan: planSchema }),
+  z.object({ version: z.literal(2), id: offset.positive(), ok: z.literal(true), plan: planSchema }),
   z.object({
-    version: z.literal(1),
+    version: z.literal(2),
     id: offset.positive(),
     ok: z.literal(false),
     error: textSchema,

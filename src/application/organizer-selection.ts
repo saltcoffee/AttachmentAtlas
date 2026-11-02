@@ -1,5 +1,6 @@
 import type { Media, Snapshot } from '../domain/model';
 import { unreferencedReasons } from './scan';
+import type { MergeGroupSelection } from './plan';
 
 export interface GroupSelection {
   readonly keepPath: string;
@@ -14,6 +15,13 @@ export interface OrganizerSelectionState {
 export function duplicateGroupKey(group: readonly Media[]): string {
   const image = group[0];
   return image ? `${image.size}:${image.digest}` : '';
+}
+export function selectedMergeGroups(state: OrganizerSelectionState): MergeGroupSelection[] {
+  return Object.entries(state.groups).flatMap(([groupKey, group]) =>
+    group.retirePaths.length
+      ? [{ groupKey, keepPath: group.keepPath, retirePaths: [...group.retirePaths] }]
+      : [],
+  );
 }
 
 /** Owns only the shared, session-scoped choices. View filters remain local to each view. */
@@ -109,6 +117,17 @@ export class OrganizerSelection {
       this.groups[groupKey] = { ...current, retirePaths: [] };
       this.changed();
     }
+  }
+
+  clearMergeSelection(): void {
+    if (!Object.values(this.groups).some((group) => group.retirePaths.length)) return;
+    this.groups = Object.fromEntries(
+      Object.entries(this.groups).map(([key, group]) => [
+        key,
+        { keepPath: group.keepPath, retirePaths: [] },
+      ]),
+    );
+    this.changed();
   }
 
   setUnreferencedSelected(paths: readonly string[], selected: boolean): void {

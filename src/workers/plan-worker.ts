@@ -8,7 +8,7 @@ self.onmessage = (event: MessageEvent<unknown>) => {
     const envelope = event.data as { id?: unknown } | null;
     if (envelope && Number.isSafeInteger(envelope.id))
       self.postMessage({
-        version: 1,
+        version: 2,
         id: envelope.id,
         ok: false,
         error: 'Invalid preview worker request.',
@@ -17,8 +17,8 @@ self.onmessage = (event: MessageEvent<unknown>) => {
   }
   const { id, snapshot, selection } = input.data;
   try {
-    self.postMessage({ version: 1, id, ok: true, plan: buildPlan(snapshot, selection) });
+    self.postMessage({ version: 2, id, ok: true, plan: buildPlan(snapshot, selection) });
   } catch (error) {
-    self.postMessage({ version: 1, id, ok: false, error: errorDetail(error) });
+    self.postMessage({ version: 2, id, ok: false, error: errorDetail(error) });
   }
 };

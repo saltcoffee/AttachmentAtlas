@@ -1,3 +1,4 @@
+import { retiringImages, retainedImages } from '../src/domain/operation-plan';
 import { describe, expect, it } from 'vitest';
 import { buildPlan, type SelectionRequest } from '../src/application/plan';
 import { OrganizerSelection, duplicateGroupKey } from '../src/application/organizer-selection';
@@ -28,18 +29,22 @@ describe('T16-07 / T16-08 explicit selection count boundaries', () => {
         kind === 'merge-exact'
           ? {
               kind,
-              groupKey: duplicateGroupKey(result.duplicates[0]!),
-              keepPath: paths[0]!,
-              retirePaths,
+              groups: [
+                {
+                  groupKey: duplicateGroupKey(result.duplicates[0]!),
+                  keepPath: paths[0]!,
+                  retirePaths,
+                },
+              ],
             }
           : { kind, retirePaths };
       if (count === 101)
         expect(() => buildPlan(result, request)).toThrow('Select 1–100 distinct images.');
       else {
         const plan = buildPlan(result, request);
-        expect(plan.retire.map((image) => image.path)).toEqual(retirePaths);
-        expect(plan.retire).toHaveLength(100);
-        expect(plan.keep.map((image) => image.path)).toEqual(
+        expect(retiringImages(plan).map((image) => image.path)).toEqual(retirePaths);
+        expect(retiringImages(plan)).toHaveLength(100);
+        expect(retainedImages(plan).map((image) => image.path)).toEqual(
           kind === 'merge-exact' ? [paths[0]] : [],
         );
       }
@@ -78,9 +83,13 @@ describe('T16-07 / T16-08 explicit selection count boundaries', () => {
     selection.setGroupSelected(key, paths.slice(1, 102), true);
     const request = (): SelectionRequest => ({
       kind: 'merge-exact',
-      groupKey: key,
-      keepPath: selection.state.groups[key]!.keepPath,
-      retirePaths: [...selection.state.groups[key]!.retirePaths],
+      groups: [
+        {
+          groupKey: key,
+          keepPath: selection.state.groups[key]!.keepPath,
+          retirePaths: [...selection.state.groups[key]!.retirePaths],
+        },
+      ],
     });
     expect(selection.state.groups[key]!.retirePaths).toHaveLength(101);
     expect(() => buildPlan(result, request())).toThrow('Select 1–100 distinct images.');
@@ -90,9 +99,13 @@ describe('T16-07 / T16-08 explicit selection count boundaries', () => {
     const accepted = request(),
       plan = buildPlan(result, accepted),
       expectedRetire = paths.slice(1, 101);
-    expect(accepted.retirePaths).toEqual(expectedRetire);
-    expect(plan.retire.map((image) => image.path)).toEqual(expectedRetire);
-    expect(plan.retire.reduce((sum, image) => sum + image.size, 0)).toBe(100 * 1024 * 1024);
+    expect(
+      accepted.kind === 'merge-exact' ? accepted.groups[0]!.retirePaths : accepted.retirePaths,
+    ).toEqual(expectedRetire);
+    expect(retiringImages(plan).map((image) => image.path)).toEqual(expectedRetire);
+    expect(retiringImages(plan).reduce((sum, image) => sum + image.size, 0)).toBe(
+      100 * 1024 * 1024,
+    );
     await new OperationService(vault, digest).execute(plan, result);
     expect(vault.removed).toEqual(expectedRetire);
     const remaining = [paths[0]!, ...paths.slice(101)];

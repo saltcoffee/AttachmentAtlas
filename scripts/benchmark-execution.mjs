@@ -4,6 +4,7 @@ import { tmpdir, cpus, platform, release } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { performance } from 'node:perf_hooks';
+import { requireCompletedResult } from './benchmark-result.mjs';
 
 // All writes stay in a newly created synthetic vault. Recycle means rename into its .trash.
 // The fixture is retained for inspection; this script never deletes files or uses a personal vault.
@@ -109,14 +110,18 @@ for (const count of [1, 20, 100])
     start = performance.now();
     const plan = buildPlan(snapshot, {
       kind: 'merge-exact',
-      groupKey: `${image.byteLength}:${snapshot.media[0].digest}`,
-      keepPath: paths[0],
-      retirePaths: paths.slice(1, count + 1),
+      groups: [
+        {
+          groupKey: `${image.byteLength}:${snapshot.media[0].digest}`,
+          keepPath: paths[0],
+          retirePaths: paths.slice(1, count + 1),
+        },
+      ],
     });
     const planMs = performance.now() - start;
     metrics = { textReads: 0, textBytes: 0, binaryReads: 0, binaryBytes: 0 };
     start = performance.now();
-    await new OperationService(vault, digest).execute(plan, snapshot);
+    requireCompletedResult(await new OperationService(vault, digest).execute(plan, snapshot));
     const executeMs = performance.now() - start;
     if (entries.size !== 130 - count || !(await vault.exists(paths[0])))
       throw new Error('Unexpected benchmark result.');
@@ -163,6 +168,6 @@ const report = {
   measurements,
 };
 await mkdir('artifacts', { recursive: true });
-const output = resolve('artifacts/v0.1.6-execution-benchmark.json');
+const output = resolve('artifacts/v0.1.7-single-group-execution-benchmark.json');
 await writeFile(output, JSON.stringify(report, null, 2) + '\n');
 console.log(JSON.stringify({ report: output, fixtureRoot: root, summary }));

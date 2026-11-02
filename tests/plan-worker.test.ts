@@ -15,9 +15,13 @@ async function fixture() {
   );
   const selection = {
     kind: 'merge-exact' as const,
-    groupKey: `${PNG.byteLength}:${result.media[0]!.digest}`,
-    keepPath: 'keep.png',
-    retirePaths: ['copy.png'],
+    groups: [
+      {
+        groupKey: `${PNG.byteLength}:${result.media[0]!.digest}`,
+        keepPath: 'keep.png',
+        retirePaths: ['copy.png'],
+      },
+    ],
   };
   return { result, selection, plan: mergePlan(result, ['copy.png'], 'keep.png') };
 }
@@ -37,24 +41,52 @@ async function worker() {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('plan worker domain boundary', () => {
+  it('rejects the previous protocol and single-group shape', async () => {
+    const { result, selection } = await fixture(),
+      scope = await worker();
+    scope.send({
+      version: 1,
+      id: 1,
+      snapshot: result,
+      selection: { kind: 'merge-exact', ...selection.groups[0] },
+    });
+    expect(scope.reply).toHaveBeenCalledWith({
+      version: 2,
+      id: 1,
+      ok: false,
+      error: 'Invalid preview worker request.',
+    });
+    scope.send({
+      version: 2,
+      id: 2,
+      snapshot: result,
+      selection: { kind: 'merge-exact', ...selection.groups[0] },
+    });
+    expect(scope.reply).toHaveBeenLastCalledWith({
+      version: 2,
+      id: 2,
+      ok: false,
+      error: 'Invalid preview worker request.',
+    });
+  });
   it('returns the same source patches and logical edits as the canonical plan builder', async () => {
     const { result, selection, plan } = await fixture(),
       scope = await worker();
-    scope.send({ version: 1, id: 1, snapshot: result, selection });
-    expect(scope.reply).toHaveBeenCalledExactlyOnceWith({ version: 1, id: 1, ok: true, plan });
+    scope.send({ version: 2, id: 1, snapshot: result, selection });
+    expect(scope.reply).toHaveBeenCalledExactlyOnceWith({ version: 2, id: 1, ok: true, plan });
     expect(plan.documents[0]!.edits).toHaveLength(2);
   });
   it('preserves structured diagnostics for invalid selections', async () => {
     const { result, selection } = await fixture(),
       scope = await worker();
     scope.send({
-      version: 1,
+      version: 2,
       id: 3,
       snapshot: result,
-      selection: { ...selection, retirePaths: [] },
+      selection: { ...selection, groups: [{ ...selection.groups[0], retirePaths: [] }] },
     });
     expect(scope.reply).toHaveBeenCalledWith({
-      version: 1,
+      version: 2,
       id: 3,
       ok: false,
       error: 'Select 1–100 distinct images.',
@@ -62,9 +94,9 @@ describe('plan worker domain boundary', () => {
   });
   it('rejects malformed input without invoking source parsing', async () => {
     const scope = await worker();
-    scope.send({ version: 1, id: 2, snapshot: {}, selection: {} });
+    scope.send({ version: 2, id: 2, snapshot: {}, selection: {} });
     expect(scope.reply).toHaveBeenCalledWith({
-      version: 1,
+      version: 2,
       id: 2,
       ok: false,
       error: 'Invalid preview worker request.',
@@ -100,7 +132,7 @@ describe('preview worker lifecycle', () => {
     const pending = plans.build(result, selection),
       worker = MockWorker.instances[0]!;
     const id = worker.postMessage.mock.calls[0]![0].id as number;
-    worker.reply({ version: 1, id, ok: true, plan });
+    worker.reply({ version: 2, id, ok: true, plan });
     await expect(pending).resolves.toEqual(plan);
     expect(worker.terminate).toHaveBeenCalledTimes(1);
   });
@@ -114,8 +146,8 @@ describe('preview worker lifecycle', () => {
       current = MockWorker.instances[1]!;
     await rejected;
     expect(old.terminate).toHaveBeenCalledTimes(1);
-    old.reply({ version: 1, id: 1, ok: true, plan });
-    current.reply({ version: 1, id: 2, ok: true, plan });
+    old.reply({ version: 2, id: 1, ok: true, plan });
+    current.reply({ version: 2, id: 2, ok: true, plan });
     await expect(second).resolves.toEqual(plan);
     expect(current.terminate).toHaveBeenCalledTimes(1);
   });
@@ -125,7 +157,7 @@ describe('preview worker lifecycle', () => {
     const pending = plans.build(result, selection),
       rejected = expect(pending).rejects.toBeInstanceOf(AtlasError);
     MockWorker.instances[0]!.reply({
-      version: 1,
+      version: 2,
       id: 1,
       ok: false,
       error: { template: 'Document changed: {path}', values: { path: '中文.md' } },
@@ -140,7 +172,7 @@ describe('preview worker lifecycle', () => {
       const pending = plans.build(result, selection),
         rejected = expect(pending).rejects.toThrow();
       const worker = MockWorker.instances[0]!;
-      if (mode === 'malformed') worker.reply({ version: 1, id: 1, ok: true, plan: {} });
+      if (mode === 'malformed') worker.reply({ version: 2, id: 1, ok: true, plan: {} });
       if (mode === 'error') worker.onerror?.();
       if (mode === 'messageerror') worker.onmessageerror?.();
       await rejected;

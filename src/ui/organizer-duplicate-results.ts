@@ -1,5 +1,12 @@
-import { t } from './i18n';
-import { duplicateGroupKey } from '../application/organizer-selection';
+import { t, problem } from './i18n';
+import { duplicateGroupKey, selectedMergeGroups } from '../application/organizer-selection';
+import {
+  checkedByteTotal,
+  MAX_MERGE_RETIRE_BYTES,
+  MAX_RETIRE_COUNT,
+} from '../domain/operation-limits';
+import { errorDetail } from '../domain/messages';
+import { exactBytes } from './modals';
 import type { Snapshot } from '../domain/model';
 import { sortGroups, matchesQuery } from './organizer-query';
 import type { OrganizerResultContext } from './organizer-result-context';
@@ -14,6 +21,10 @@ export class OrganizerDuplicateResults {
   private pages!: HTMLElement;
   private empty!: HTMLElement;
   private selected!: HTMLButtonElement;
+  private summary!: HTMLElement;
+  private budget!: HTMLElement;
+  private preview!: HTMLButtonElement;
+  private clear!: HTMLButtonElement;
   private cards = new Map<string, OrganizerGroupCard>();
   constructor(private context: OrganizerResultContext) {}
 
@@ -31,6 +42,22 @@ export class OrganizerDuplicateResults {
     });
     this.selected.dataset.focusKey = 'groups:selected';
     this.selected.onclick = () => this.changeMode('selected');
+    this.summary = parent.createEl('p', { attr: { role: 'status' } });
+    this.budget = parent.createEl('p', { cls: 'atlas-error' });
+    const actions = parent.createDiv({ cls: 'atlas-actions' });
+    this.clear = actions.createEl('button', { text: t('Clear all merge selections') });
+    this.clear.dataset.focusKey = 'merge:clear';
+    this.clear.onclick = () => this.context.plugin.selection.clearMergeSelection();
+    this.preview = actions.createEl('button', {
+      text: t('Preview selected groups'),
+      cls: 'mod-cta',
+    });
+    this.preview.dataset.focusKey = 'preview:merge';
+    this.preview.onclick = () =>
+      this.context.onPreview({
+        kind: 'merge-exact',
+        groups: selectedMergeGroups(this.context.plugin.selection.state),
+      });
     this.empty = parent.createEl('p');
     this.list = parent.createDiv();
     this.pages = parent.createDiv();
@@ -61,6 +88,68 @@ export class OrganizerDuplicateResults {
     );
     this.context.state.pageByTab.duplicates = page;
     const visible = ordered.slice(page * GROUP_PAGE_SIZE, (page + 1) * GROUP_PAGE_SIZE);
+    const choices = selectedMergeGroups(selection);
+    const images = new Map(snapshot.media.map((image) => [image.path, image]));
+    const selectedPaths = choices.flatMap((group) => group.retirePaths);
+    let blocker =
+      this.context.writeBlocker(snapshot) ||
+      (!this.context.queryValid() ? t('Correct the size filter before previewing.') : '');
+    try {
+      const total = checkedByteTotal(
+        selectedPaths.map((path) => {
+          const image = images.get(path);
+          if (!image)
+            throw new Error(
+              'Selection no longer matches this duplicate group. Clear the group or scan again.',
+            );
+          return image.size;
+        }),
+      );
+      const filterHidden = selectedPaths.filter(
+        (path) => !matchesQuery(images.get(path)!, this.context.state.query),
+      ).length;
+      const visibleKeys = new Set(visible.map(duplicateGroupKey));
+      const pageHidden = choices
+        .filter((group) => !visibleKeys.has(group.groupKey))
+        .reduce((sum, group) => sum + group.retirePaths.length, 0);
+      this.summary.setText(
+        t(
+          '{groups} selected groups · {count} copies · {size} · {filterHidden} outside filter · {pageHidden} outside group page',
+          {
+            groups: choices.length,
+            count: selectedPaths.length,
+            size: exactBytes(total),
+            filterHidden,
+            pageHidden,
+          },
+        ),
+      );
+      const issues: string[] = [];
+      if (selectedPaths.length > MAX_RETIRE_COUNT)
+        issues.push(
+          t('Selection exceeds the operation limit by {count} images.', {
+            count: selectedPaths.length - MAX_RETIRE_COUNT,
+          }),
+        );
+      if (total > MAX_MERGE_RETIRE_BYTES)
+        issues.push(
+          t('Selection exceeds the byte limit by {bytes} bytes ({size}). Limit: {limit}.', {
+            bytes: total - MAX_MERGE_RETIRE_BYTES,
+            size: exactBytes(total - MAX_MERGE_RETIRE_BYTES),
+            limit: exactBytes(MAX_MERGE_RETIRE_BYTES),
+          }),
+        );
+      blocker ||=
+        issues.join(' ') ||
+        (!selectedPaths.length ? t('Select duplicate copies to preview the merge.') : '');
+      this.budget.setText(issues.join(' ') || blocker);
+    } catch (error) {
+      blocker = problem(errorDetail(error));
+      this.budget.setText(blocker);
+    }
+    this.preview.disabled = !!blocker;
+    this.preview.title = blocker;
+    this.clear.disabled = this.context.plugin.busy || !choices.length;
     const wanted = new Set(visible.map(duplicateGroupKey));
     for (const key of this.cards.keys()) if (!wanted.has(key)) this.cards.delete(key);
     reconcileElements(

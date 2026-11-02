@@ -146,9 +146,10 @@ describe('read-only Excalidraw reference indexing', () => {
       'map.excalidraw.md',
       textBytes(drawing([], '## Embedded Files\nfile1: [[unused.png]]\n')),
     );
-    await expect(new OperationService(vault, digest).execute(plan, result)).rejects.toThrow(
-      'sources changed',
-    );
+    await expect(new OperationService(vault, digest).execute(plan, result)).resolves.toMatchObject({
+      outcome: 'failed',
+      issue: { detail: 'Reference sources changed. Scan again.' },
+    });
     expect(vault.removed).toEqual([]);
   });
 });

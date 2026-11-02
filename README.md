@@ -4,7 +4,7 @@ Find duplicate images, clean up unused images, and keep your Obsidian notes link
 
 [简体中文](README.zh-CN.md) · [Changelog](CHANGELOG.md)
 
-- **Merge exact duplicates:** retain one copy and update supported references before recycling the extras.
+- **Merge exact duplicates in batches:** choose a retained image and explicit copies in each group, then review and confirm the selected groups together.
 - **Clean up unused images:** review images with no detected references and choose which to recycle.
 - **Inspect large images:** browse by file size and check dimensions and reference locations.
 
@@ -31,8 +31,9 @@ No Node.js or npm is needed. GitHub's source ZIP and tarball are not installable
 
 1. Click the **Attachment Atlas** images icon in the ribbon, or run **Attachment Atlas: Open image organizer** from the command palette.
 2. Select **Scan vault**. Scanning does not change notes or images.
-3. Open **Exact duplicates** to choose copies to retain, or **Unreferenced** to select unused images.
-4. Preview the file paths and proposed changes, then confirm.
+3. In **Exact duplicates**, choose a retained image and copies to delete in each group. Use **Preview selected groups** to review all selected groups together. **Unreferenced** has its own selection and preview.
+4. Check the file paths and reference changes, then confirm. A merge accepts up to 100 selected copies totaling 192 MiB across all groups; retained and unselected images do not count toward these limits.
+5. Review the session result for completed, partially completed, unprocessed, or unconfirmed groups. If cleanup stops, scan again and preview the remaining work; applied changes are kept.
 
 To limit image scanning or protect folders, open **Settings → Attachment Atlas**.
 

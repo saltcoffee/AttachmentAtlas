@@ -2,7 +2,7 @@ import { t, problem } from './ui/i18n';
 import { Notice, Plugin } from 'obsidian';
 import { DEFAULT_SETTINGS, type Plan, type Settings, type Snapshot } from './domain/model';
 import { scan } from './application/scan';
-import type { PlanRequest } from './application/plan';
+import { validatePlan, type PlanRequest } from './application/plan';
 import { OrganizerSelection } from './application/organizer-selection';
 import { OperationService } from './application/execute';
 import { ObsidianVault } from './infrastructure/obsidian-vault';
@@ -13,6 +13,7 @@ import { AtlasSettingsTab } from './ui/settings-tab';
 import { ConfirmPlanModal } from './ui/modals';
 import { errorDetail, type Text } from './domain/messages';
 import { PlanClient } from './infrastructure/plan-client';
+import type { ExecutionResult } from './application/execution-result';
 export default class AttachmentAtlas extends Plugin {
   settings: Settings = structuredClone(DEFAULT_SETTINGS);
   snapshot: Snapshot | null = null;
@@ -22,6 +23,7 @@ export default class AttachmentAtlas extends Plugin {
   busy = false;
   previewing = false;
   previewError: Text = '';
+  result: ExecutionResult | null = null;
   private revision = 0;
   private controller: AbortController | null = null;
   private hashes = new HashClient();
@@ -110,7 +112,9 @@ export default class AttachmentAtlas extends Plugin {
       if (leaf.view instanceof OrganizerView) leaf.view.render();
   }
   private progress(message: Text): void {
-    this.status = message;
+    this.status = this.controller?.signal.aborted
+      ? 'Stopping. Waiting for the current file action.'
+      : message;
     if (this.refreshTimer === null)
       this.refreshTimer = window.setTimeout(() => {
         this.refreshTimer = null;
@@ -155,6 +159,10 @@ export default class AttachmentAtlas extends Plugin {
   }
   cancel(): void {
     this.controller?.abort();
+    if (this.controller) {
+      this.status = 'Stopping. Waiting for the current file action.';
+      this.refresh();
+    }
   }
   async preview(view: OrganizerView, request: PlanRequest, queryValid = true): Promise<void> {
     let token = 0;
@@ -202,6 +210,30 @@ export default class AttachmentAtlas extends Plugin {
         if (token === this.previewToken) this.cancelPreview(false);
         return;
       }
+      const planSelection: PlanRequest['selection'] =
+        plan.kind === 'merge-exact'
+          ? {
+              kind: 'merge-exact',
+              groups: plan.groups.map((group) => ({
+                groupKey: group.groupKey,
+                keepPath: group.keep.path,
+                retirePaths: group.retire.map((image) => image.path),
+              })),
+            }
+          : { kind: 'recycle-unreferenced', retirePaths: plan.retire.map((image) => image.path) };
+      if (
+        plan.kind !== independentRequest.selection.kind ||
+        !this.selectionMatches(planSelection, state.groups, state.unreferencedPaths)
+      )
+        throw new Error('Selection changed. Review the current selection before previewing.');
+      validatePlan(snapshot, plan);
+      const freeze = (value: unknown): void => {
+        if (value && typeof value === 'object') {
+          Object.values(value).forEach(freeze);
+          Object.freeze(value);
+        }
+      };
+      freeze(plan);
       this.previewing = false;
       this.previewModal = new ConfirmPlanModal(
         this.app,
@@ -219,6 +251,7 @@ export default class AttachmentAtlas extends Plugin {
             });
           }
         },
+        Object.fromEntries(snapshot.media.map((image) => [image.path, [...image.reasons]])),
       );
       this.refresh();
       this.previewModal.open();
@@ -292,15 +325,29 @@ export default class AttachmentAtlas extends Plugin {
       return;
     }
     this.busy = true;
+    this.result = null;
     this.selection.invalidate();
     this.lastError = '';
     this.controller = new AbortController();
     this.refresh();
     try {
-      await this.operations.execute(plan, snapshot, this.controller.signal, (message) =>
-        this.progress(message),
+      this.result = await this.operations.execute(
+        plan,
+        snapshot,
+        this.controller.signal,
+        (message) => this.progress(message),
       );
-      this.status = 'Completed. Images were deleted according to Obsidian’s deleted-file setting.';
+      if (this.result.outcome === 'completed')
+        this.status =
+          'Completed. Images were deleted according to Obsidian’s deleted-file setting.';
+      else {
+        this.status =
+          this.result.outcome === 'cancelled'
+            ? 'Cleanup cancelled. Applied changes are kept. Scan again before continuing.'
+            : 'Cleanup stopped. Applied changes are kept. Scan again before continuing.';
+        if (this.result.outcome === 'failed' && this.result.issue)
+          this.lastError = this.result.issue.detail;
+      }
     } catch (error) {
       this.fail(error);
       this.status = 'Cleanup stopped. Applied changes are kept. Scan again before continuing.';
@@ -337,13 +384,24 @@ export default class AttachmentAtlas extends Plugin {
     unreferencedPaths: readonly string[],
   ): boolean {
     const samePaths = (left: readonly string[], right: readonly string[]) =>
-      left.length === right.length && left.every((path) => right.includes(path));
+      left.length === right.length &&
+      new Set(right).size === right.length &&
+      left.every((path) => right.includes(path));
     if (request.kind === 'merge-exact') {
-      const current = groups[request.groupKey];
+      const selectedKeys = Object.keys(groups).filter((key) => groups[key]!.retirePaths.length);
       return (
-        !!current &&
-        current.keepPath === request.keepPath &&
-        samePaths(current.retirePaths, request.retirePaths)
+        samePaths(
+          selectedKeys,
+          request.groups.map((group) => group.groupKey),
+        ) &&
+        request.groups.every((group) => {
+          const current = groups[group.groupKey];
+          return (
+            !!current &&
+            current.keepPath === group.keepPath &&
+            samePaths(current.retirePaths, group.retirePaths)
+          );
+        })
       );
     }
     return samePaths(unreferencedPaths, request.retirePaths);
