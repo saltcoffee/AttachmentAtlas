@@ -9,6 +9,7 @@ import {
 import { scan } from '../src/application/scan';
 import { buildPlan } from '../src/application/plan';
 import type { Plan } from '../src/domain/model';
+import { active, sourcePath } from '../src/domain/paths';
 export const PNG = Uint8Array.from(
   Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aL1sAAAAASUVORK5CYII=',
@@ -16,6 +17,7 @@ export const PNG = Uint8Array.from(
   ),
 ).buffer;
 export class MemoryVault implements VaultPort {
+  private sourceListeners = new Set<(path: string) => void>();
   files = new Map<string, ArrayBuffer>();
   removed: string[] = [];
   onProcess?: (path: string) => void;
@@ -23,6 +25,26 @@ export class MemoryVault implements VaultPort {
   constructor(entries: Record<string, string | ArrayBuffer>) {
     for (const [path, data] of Object.entries(entries))
       this.files.set(path, typeof data === 'string' ? textBytes(data) : data.slice(0));
+    const set = this.files.set.bind(this.files),
+      remove = this.files.delete.bind(this.files);
+    this.files.set = (path, data) => {
+      set(path, data);
+      this.sourceChanged(path);
+      return this.files;
+    };
+    this.files.delete = (path) => {
+      const deleted = remove(path);
+      if (deleted) this.sourceChanged(path);
+      return deleted;
+    };
+  }
+  private sourceChanged(path: string): void {
+    if (active(path) && sourcePath(path))
+      for (const listener of this.sourceListeners) listener(path);
+  }
+  watchSourceChanges(onChange: (path: string) => void): () => void {
+    this.sourceListeners.add(onChange);
+    return () => this.sourceListeners.delete(onChange);
   }
   list(): FileEntry[] {
     return [...this.files].map(([path, data]) => ({

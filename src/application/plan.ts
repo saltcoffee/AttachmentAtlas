@@ -131,14 +131,16 @@ export function buildPlan(snapshot: Snapshot, request: SelectionRequest): Plan {
       checkedByteTotal(retire.map((image) => image.size)) <= MAX_MERGE_RETIRE_BYTES,
       'Selected duplicate copies exceed 192 MiB.',
     );
+  // Unreferenced images have no targets to rewrite or resolve again.
+  if (plan.kind === 'recycle-unreferenced') return plan;
   const replacements = replacementTargets(plan);
   const updated = snapshot.sources.map((source) => ({
     source,
-    rewrite: plan.kind === 'merge-exact' ? rewrite(source, replacements) : null,
+    rewrite: rewrite(source, replacements),
   }));
   const documents = updated
     .flatMap(({ source, rewrite: change }) =>
-      change && change.text !== source.text
+      change.text !== source.text
         ? [
             {
               path: source.path,
@@ -155,7 +157,7 @@ export function buildPlan(snapshot: Snapshot, request: SelectionRequest): Plan {
     snapshot.sources,
     updated.map(({ source, rewrite: change }) => ({
       path: source.path,
-      text: change?.text ?? source.text,
+      text: change.text,
     })),
     snapshot.files.map((file) => file.path),
     snapshot.files.filter((file) => !paths.has(file.path)).map((file) => file.path),

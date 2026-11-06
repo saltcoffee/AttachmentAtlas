@@ -102,6 +102,8 @@ export interface VaultPort {
   resolve?(reference: Reference): string | null;
   list(): FileEntry[];
   readText(path: string): Promise<string>;
+  /** Observe active reference-source changes, including unsaved editor content. */
+  watchSourceChanges(onChange: (path: string) => void): () => void;
   readBinary(path: string): Promise<ArrayBuffer>;
   process(path: string, transform: (text: string) => string): Promise<void>;
   /** Delete one active attachment according to Obsidian's deletion preference. */

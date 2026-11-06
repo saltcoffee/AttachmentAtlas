@@ -31,7 +31,7 @@ No Node.js or npm is needed. GitHub's source ZIP and tarball are not installable
 
 1. Click the **Attachment Atlas** images icon in the ribbon, or run **Attachment Atlas: Open image organizer** from the command palette.
 2. Select **Scan vault**. Scanning does not change notes or images.
-3. In **Exact duplicates**, choose a retained image and copies to delete in each group. Use **Preview selected groups** to review all selected groups together. **Unreferenced** has its own selection and preview.
+3. In **Exact duplicates**, choose a retained image and copies to delete in each group. Use **Preview selected groups** to review all selected groups together. In **Unreferenced**, select images, click **Recycle selected images**, and confirm in the dialog. Recycling reuses the scan without fingerprinting all images again.
 4. Check the file paths and reference changes, then confirm. A merge accepts up to 100 selected copies totaling 192 MiB across all groups; retained and unselected images do not count toward these limits.
 5. Review the session result for completed, partially completed, unprocessed, or unconfirmed groups. If cleanup stops, scan again and preview the remaining work; applied changes are kept.
 

@@ -2,7 +2,7 @@ import { t, problem } from './ui/i18n';
 import { Notice, Plugin } from 'obsidian';
 import { DEFAULT_SETTINGS, type Plan, type Settings, type Snapshot } from './domain/model';
 import { scan } from './application/scan';
-import { validatePlan, type PlanRequest } from './application/plan';
+import { buildPlan, validatePlan, type PlanRequest } from './application/plan';
 import { OrganizerSelection } from './application/organizer-selection';
 import { OperationService } from './application/execute';
 import { ObsidianVault } from './infrastructure/obsidian-vault';
@@ -188,10 +188,11 @@ export default class AttachmentAtlas extends Plugin {
       const independentRequest = structuredClone(request);
       this.previewSource = view;
       this.retryRequest = independentRequest;
-      this.previewing = true;
+      this.previewing = independentRequest.selection.kind === 'merge-exact';
       this.refresh();
-      // Let the loading state paint before structured cloning the snapshot to the worker.
-      await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      if (this.previewing)
+        // Let the loading state paint before structured cloning the snapshot to the worker.
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       const current = () =>
         token === this.previewToken &&
         this.snapshot === snapshot &&
@@ -205,7 +206,10 @@ export default class AttachmentAtlas extends Plugin {
         if (token === this.previewToken) this.cancelPreview(false);
         return;
       }
-      const plan = await this.plans.build(snapshot, independentRequest.selection);
+      const plan =
+        independentRequest.selection.kind === 'recycle-unreferenced'
+          ? buildPlan(snapshot, independentRequest.selection)
+          : await this.plans.build(snapshot, independentRequest.selection);
       if (!current()) {
         if (token === this.previewToken) this.cancelPreview(false);
         return;
@@ -251,7 +255,9 @@ export default class AttachmentAtlas extends Plugin {
             });
           }
         },
-        Object.fromEntries(snapshot.media.map((image) => [image.path, [...image.reasons]])),
+        plan.kind === 'merge-exact'
+          ? Object.fromEntries(snapshot.media.map((image) => [image.path, [...image.reasons]]))
+          : {},
       );
       this.refresh();
       this.previewModal.open();

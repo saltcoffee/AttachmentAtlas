@@ -74,15 +74,16 @@ export class ConfirmPlanModal extends Modal {
   }
 
   private render(): void {
+    if (this.plan.kind === 'recycle-unreferenced') {
+      this.renderRecycleConfirmation();
+      return;
+    }
     const checked = this.consent?.checked ?? false,
       focus = captureFocus(this.contentEl),
       el = this.contentEl;
     el.empty();
     el.createEl('h2', {
-      text:
-        this.plan.kind === 'merge-exact'
-          ? t('Review duplicate merge')
-          : t('Review unreferenced image recycling'),
+      text: t('Review duplicate merge'),
     });
     const valid = this.valid;
     if (!valid)
@@ -127,13 +128,10 @@ export class ConfirmPlanModal extends Modal {
     cancel.dataset.focusKey = 'plan-cancel';
     cancel.onclick = () => this.close();
     const button = actions.createEl('button', {
-      text:
-        this.plan.kind === 'merge-exact'
-          ? t('Merge {groups} groups and delete {count} images', {
-              groups: this.plan.groups.length,
-              count: retire.length,
-            })
-          : t('Delete {count} images', { count: retire.length }),
+      text: t('Merge {groups} groups and delete {count} images', {
+        groups: this.plan.groups.length,
+        count: retire.length,
+      }),
       cls: 'mod-warning',
     });
     button.dataset.focusKey = 'plan-confirm';
@@ -150,6 +148,42 @@ export class ConfirmPlanModal extends Modal {
       void this.confirm().catch((error) => new Notice(errorText(error)));
     };
     restoreFocus(el, focus);
+  }
+
+  private renderRecycleConfirmation(): void {
+    const el = this.contentEl,
+      retire = retiringImages(this.plan);
+    el.empty();
+    el.createEl('h2', { text: t('Confirm image recycling') });
+    el.createEl('p', {
+      text: t('Delete {count} unreferenced images ({size})?', {
+        count: retire.length,
+        size: exactBytes(checkedByteTotal(retire.map((image) => image.size))),
+      }),
+    });
+    if (retire.length === 1) el.createEl('p', { text: retire[0]!.path });
+    el.createEl('p', {
+      text: t(
+        'Images follow Obsidian’s “Deleted files” setting. Permanently deleted images cannot be restored.',
+      ),
+    });
+    const actions = el.createDiv({ cls: 'atlas-actions' }),
+      cancel = actions.createEl('button', { text: t('Cancel') }),
+      button = actions.createEl('button', {
+        text: t('Delete {count} images', { count: retire.length }),
+        cls: 'mod-warning',
+      });
+    cancel.dataset.focusKey = 'plan-cancel';
+    cancel.onclick = () => this.close();
+    button.dataset.focusKey = 'plan-confirm';
+    button.onclick = () => {
+      if (this.closed || this.confirmed || button.disabled) return;
+      this.confirmed = true;
+      button.disabled = true;
+      this.close();
+      void this.confirm().catch((error) => new Notice(errorText(error)));
+    };
+    cancel.focus();
   }
 
   private renderRetirePaths(el: HTMLElement): void {

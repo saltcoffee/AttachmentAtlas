@@ -4,6 +4,17 @@ Notable user-facing changes are recorded here. Version entries are used as relea
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-11-06
+
+### Changed
+
+- Recycle selected unreferenced images through a simple confirmation dialog, without a separate preview or an extra consent checkbox.
+- Reuse scan results without fingerprinting all images again. Check reference documents once per recycling operation instead of rereading them before every image deletion.
+
+### Fixed
+
+- Stop remaining deletions when reference sources, unsaved editor contents, or the active file inventory change during recycling, while retaining per-image consistency checks.
+
 ## [0.1.7] - 2026-11-02
 
 ### Added

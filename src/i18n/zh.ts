@@ -49,7 +49,7 @@ export const zh = {
   'View blocking issues': '查看阻塞问题',
   'Open Needs review and resolve the blocking issues, then scan again.':
     '请在“待检查”中处理阻塞问题，然后重新扫描。',
-  'Select images to preview recycling.': '请选择图片以预览回收。',
+  'Select images to recycle.': '请选择需要回收的图片。',
   'No references detected yet; reference coverage is incomplete.':
     '暂未检测到引用，但引用检查尚不完整。',
   'Supported reference sources scanned. External apps and hidden configuration are outside coverage.':
@@ -185,7 +185,8 @@ export const zh = {
   'Document results': '文档处理结果',
   '{path}: {state}': '{path}：{state}',
   'Image results': '图片处理结果',
-  'Preview recycling ({count})': '预览回收（{count}）',
+  'Recycle selected images ({count})': '回收所选图片（{count}）',
+  'Correct the size filter before recycling.': '请先修正大小筛选条件，再回收图片。',
   'No images match this category and filter.': '此分类和筛选条件下没有图片。',
   'Select {path}': '选择 {path}',
   ' Select for recycling': ' 选择以回收',
@@ -193,7 +194,11 @@ export const zh = {
     '{format}{dimensions} · {size} · {count} 处引用',
   'Page {page} of {total}': '第 {page} 页，共 {total} 页',
   'Review duplicate merge': '确认重复图片合并',
-  'Review unreferenced image recycling': '确认未引用图片回收',
+  'Confirm image recycling': '确认回收图片',
+  'Delete {count} unreferenced images ({size})?': '确定删除 {count} 张未引用图片（{size}）？',
+  'Images follow Obsidian’s “Deleted files” setting. Permanently deleted images cannot be restored.':
+    '图片将按 Obsidian 的“删除文件”设置处理。永久删除的图片无法找回。',
+  'Checking reference sources.': '正在核对引用文档。',
   'Retain: {path}': '保留：{path}',
   '{count} images · {size} active-image reduction · {documents} documents · {edits} rewritten targets':
     '{count} 张图片 · 活动图片减少 {size} · 修改 {documents} 份文档 · 改写 {edits} 处引用目标',

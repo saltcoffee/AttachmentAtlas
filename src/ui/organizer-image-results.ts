@@ -173,14 +173,14 @@ export class OrganizerImageResults {
     clear.disabled = this.context.plugin.busy;
     clear.onclick = () => this.context.plugin.selection.clearUnreferenced();
     const preview = toolbar.createEl('button', {
-      text: t('Preview recycling ({count})', { count: selected.length }),
+      text: t('Recycle selected images ({count})', { count: selected.length }),
       cls: 'mod-cta',
     });
     preview.dataset.focusKey = 'preview:unreferenced';
     const blocker =
       this.context.writeBlocker(snapshot) ||
-      (!this.context.queryValid() ? t('Correct the size filter before previewing.') : '') ||
-      (!selected.length ? t('Select images to preview recycling.') : '') ||
+      (!this.context.queryValid() ? t('Correct the size filter before recycling.') : '') ||
+      (!selected.length ? t('Select images to recycle.') : '') ||
       (selected.length > MAX_RETIRE_COUNT ? t('Selected images exceed the 100 image limit.') : '');
     preview.disabled = !!blocker;
     preview.title = blocker;

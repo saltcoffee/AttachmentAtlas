@@ -1,6 +1,6 @@
 {
   "name": "attachment-atlas",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "private": true,
   "description": "Reference-aware image cleanup for Obsidian.",
   "type": "module",

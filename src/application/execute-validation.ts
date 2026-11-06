@@ -5,8 +5,11 @@ import { replacementTargets, retainedImages } from '../domain/operation-plan';
 import { message } from '../domain/messages';
 import { checkCancelled } from './cancellation';
 
-/** Every boundary rereads all sources; indexes only avoid repeated path searches. */
+/** Recycling reuses checked sources until a source change; merges verify their rewrites each time. */
 export class ExecutionVerifier {
+  private sourcesVerified = false;
+  private changedSource = '';
+  private stopWatching?: () => void;
   private readonly sources;
   private readonly changes;
   private readonly baselineNames;
@@ -22,6 +25,35 @@ export class ExecutionVerifier {
     this.baselineNames = snapshot.files.map((file) => file.path);
     this.baselineResolution = createReferenceResolver(this.baselineNames);
     this.replacements = replacementTargets(plan);
+    if (plan.kind === 'recycle-unreferenced')
+      this.stopWatching = vault.watchSourceChanges((path) => {
+        this.changedSource ||= path;
+      });
+  }
+
+  dispose(): void {
+    this.stopWatching?.();
+    this.stopWatching = undefined;
+  }
+
+  private assertSourcesUnchanged(): void {
+    assert(
+      !this.changedSource,
+      message('Document changed during execution: {path}', { path: this.changedSource }),
+    );
+  }
+
+  /** Check the inventory and source-change notifications without yielding before a deletion. */
+  assertUnchanged(removed: ReadonlySet<string>) {
+    const files = this.vault.list().filter((file) => active(file.path));
+    const names = files.map((file) => file.path).sort();
+    const expected = this.baselineNames.filter((path) => !removed.has(path)).sort();
+    assert(
+      names.length === expected.length && names.every((path, i) => path === expected[i]),
+      'Active vault files changed during cleanup.',
+    );
+    if (this.plan.kind === 'recycle-unreferenced') this.assertSourcesUnchanged();
+    return files;
   }
 
   async verify(
@@ -30,19 +62,15 @@ export class ExecutionVerifier {
     signal?: AbortSignal,
     finalReferences = false,
   ): Promise<void> {
-    const files = this.vault.list().filter((file) => active(file.path));
-    const names = files.map((file) => file.path).sort();
-    const expected = this.baselineNames.filter((path) => !removed.has(path)).sort();
-    assert(
-      names.length === expected.length && names.every((path, i) => path === expected[i]),
-      'Active vault files changed during cleanup.',
-    );
+    checkCancelled(signal);
+    const files = this.assertUnchanged(removed);
+    if (this.plan.kind === 'recycle-unreferenced' && this.sourcesVerified) return;
     const sources = files.filter((file) => sourcePath(file.path));
     assert(
       sources.length === this.sources.size && sources.every((file) => this.sources.has(file.path)),
       'Reference source inventory changed.',
     );
-    const resolve = createReferenceResolver(names);
+    const resolve = createReferenceResolver(files.map((file) => file.path));
     for (const file of sources) {
       checkCancelled(signal);
       const source = this.sources.get(file.path)!;
@@ -57,6 +85,11 @@ export class ExecutionVerifier {
         text === expectedText,
         message('Document changed during execution: {path}', { path: file.path }),
       );
+      // Recycling changes no documents; matching source text preserves the scan's reference proof.
+      if (this.plan.kind === 'recycle-unreferenced') {
+        this.assertSourcesUnchanged();
+        continue;
+      }
       const parsed = parseSource(file.path, text);
       assert(
         parsed.references.length === source.references.length,
@@ -87,5 +120,6 @@ export class ExecutionVerifier {
       );
     }
     checkCancelled(signal);
+    this.sourcesVerified = true;
   }
 }

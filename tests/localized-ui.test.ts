@@ -5,7 +5,7 @@ import { ConfirmPlanModal } from '../src/ui/modals';
 import { OrganizerView } from '../src/ui/organizer-view';
 import { AtlasSettingsTab } from '../src/ui/settings-tab';
 import { t } from '../src/ui/i18n';
-import { MemoryVault, PNG, mergePlan, snapshot } from './helpers';
+import { MemoryVault, PNG, mergePlan, recyclePlan, snapshot } from './helpers';
 import { UiElement } from './ui-elements';
 import { drawing } from './excalidraw-fixtures';
 import { settingsFrom } from '../src/infrastructure/settings';
@@ -263,6 +263,29 @@ describe('localized plugin surfaces', () => {
     },
   );
 
+  it.each(['zh', 'en'])(
+    'confirms unreferenced recycling directly without a preview or consent checkbox in %s',
+    async (language) => {
+      host.language = language;
+      const state = await snapshot(new MemoryVault({ 'unused.png': PNG })),
+        confirm = vi.fn().mockResolvedValue(undefined),
+        modal = new ConfirmPlanModal(app, recyclePlan(state, ['unused.png']), confirm);
+      modal.onOpen();
+      const root = elements(modal.contentEl),
+        button = root.all().find((node) => node.dataset.focusKey === 'plan-confirm')!;
+      expect(root.contents()).toContain(
+        language === 'zh' ? '确认回收图片' : 'Confirm image recycling',
+      );
+      expect(root.contents()).toContain('unused.png');
+      expect(root.all().some((node) => node.attrs.type === 'checkbox')).toBe(false);
+      expect(root.contents()).not.toContain(language === 'zh' ? '引用改动' : 'Reference changes');
+      expect(button.disabled).toBe(false);
+      expect(confirm).not.toHaveBeenCalled();
+      button.onclick?.();
+      expect(confirm).toHaveBeenCalledOnce();
+    },
+  );
+
   it.each(settingsRenderers)(
     'indexes without side effects and saves a normalized draft using %s settings',
     async (renderer) => {
@@ -462,7 +485,7 @@ describe('localized plugin surfaces', () => {
     expect(root.contents()).not.toContain('24 小时');
     checkbox.checked = true;
     checkbox.onchange?.();
-    const button = root.all().find((node) => node.text === '预览回收（1）')!;
+    const button = root.all().find((node) => node.text === '回收所选图片（1）')!;
     expect(button.disabled).toBe(false);
     button.onclick?.();
     expect(preview).toHaveBeenCalledWith(
@@ -476,6 +499,6 @@ describe('localized plugin surfaces', () => {
     );
     vault.files.set('note.md', new TextEncoder().encode('![[unused.png]]').buffer);
     acceptSnapshot(plugin, await snapshot(vault));
-    expect(root.all().find((node) => node.text === '预览回收（0）')?.disabled).toBe(true);
+    expect(root.all().find((node) => node.text === '回收所选图片（0）')?.disabled).toBe(true);
   });
 });

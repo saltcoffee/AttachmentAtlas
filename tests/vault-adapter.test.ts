@@ -157,3 +157,58 @@ describe('Obsidian attachment configuration and reference resolution', () => {
     expect(getFirstLinkpathDest).toHaveBeenCalledExactlyOnceWith(expected, 'notes/current.md');
   });
 });
+
+describe('reference source change observation', () => {
+  it('observes source and editor changes, ignores images, and releases every event subscription', () => {
+    const callbacks = new Map<string, (file: { path: string }, oldPath: string) => void>(),
+      editorCallbacks = new Map<
+        string,
+        (editor: object, info: { file: { path: string } | null }) => void
+      >(),
+      offVault = vi.fn((event: { name: string }) => callbacks.delete(event.name)),
+      offWorkspace = vi.fn((event: { name: string }) => editorCallbacks.delete(event.name)),
+      app = {
+        vault: {
+          on: (name: string, callback: (file: { path: string }, oldPath: string) => void) => {
+            callbacks.set(name, callback);
+            return { name };
+          },
+          offref: offVault,
+        },
+        workspace: {
+          on: (
+            name: string,
+            callback: (editor: object, info: { file: { path: string } | null }) => void,
+          ) => {
+            editorCallbacks.set(name, callback);
+            return { name };
+          },
+          offref: offWorkspace,
+        },
+      } as unknown as App,
+      changed = vi.fn(),
+      stop = new ObsidianVault(app).watchSourceChanges(changed),
+      emit = (name: string, path: string, oldPath = '') => callbacks.get(name)?.({ path }, oldPath);
+    emit('create', 'new.md');
+    emit('modify', 'map.canvas');
+    emit('delete', 'drawing.excalidraw');
+    emit('rename', 'archive.txt', 'old.md');
+    emit('rename', 'renamed.md', 'source.txt');
+    emit('modify', 'images/a.png');
+    emit('modify', '.private/note.md');
+    editorCallbacks.get('editor-change')?.({}, { file: { path: 'unsaved.md' } });
+    expect(changed.mock.calls.map(([path]) => path)).toEqual([
+      'new.md',
+      'map.canvas',
+      'drawing.excalidraw',
+      'old.md',
+      'renamed.md',
+      'unsaved.md',
+    ]);
+    stop();
+    expect(offVault).toHaveBeenCalledTimes(4);
+    expect(offWorkspace).toHaveBeenCalledOnce();
+    expect(callbacks.size).toBe(0);
+    expect(editorCallbacks.size).toBe(0);
+  });
+});

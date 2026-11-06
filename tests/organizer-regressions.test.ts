@@ -401,12 +401,18 @@ describe('lazy plan previews', () => {
       const confirm = vi.fn().mockResolvedValue(undefined);
       const plan: Plan = {
         revision: 1,
-        kind: 'recycle-unreferenced',
-        retire: Array.from({ length: 51 }, (_, index) => ({
-          path: `${index}.png`,
-          digest: '',
-          size: 1,
-        })),
+        kind: 'merge-exact',
+        groups: [
+          {
+            groupKey: 'fixture',
+            keep: { path: 'keep.png', digest: '', size: 1 },
+            retire: Array.from({ length: 51 }, (_, index) => ({
+              path: `${index}.png`,
+              digest: '',
+              size: 1,
+            })),
+          },
+        ],
         documents: [],
         baseline: [],
       };
