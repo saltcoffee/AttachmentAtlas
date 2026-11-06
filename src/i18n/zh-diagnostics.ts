@@ -113,7 +113,6 @@ export const diagnostics = {
   'File not found: {path}': '找不到文件：{path}',
   'Image cannot be recycled: {path}. {reason}': '无法回收图片：{path}。{reason}',
   'Image changed or is protected: {path}': '图片已变化或受到保护：{path}',
-  'Image is no longer recyclable: {path}': '图片已不再符合回收条件：{path}',
   'Reference target changed unexpectedly: {path}': '引用目标发生了意外变化：{path}',
   'Save the open editor before scanning: {path}': '请先保存打开的编辑器内容再扫描：{path}',
   'Unsupported reference container: {path}': '不支持的引用容器：{path}',

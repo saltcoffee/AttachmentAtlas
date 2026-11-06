@@ -2,7 +2,7 @@ import { App, FileSystemAdapter, MarkdownView, TFile } from 'obsidian';
 import { lstat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { assert, type Reference, type VaultPort } from '../domain/model';
-import { active, vaultPath } from '../domain/paths';
+import { active, sourcePath, vaultPath } from '../domain/paths';
 import { message } from '../domain/messages';
 export class ObsidianVault implements VaultPort {
   constructor(private app: App) {}
@@ -60,6 +60,29 @@ export class ObsidianVault implements VaultPort {
           message('Save the open editor before scanning: {path}', { path }),
         );
     return text;
+  }
+  watchSourceChanges(onChange: (path: string) => void): () => void {
+    const changed = (path: string) => {
+      if (active(path) && sourcePath(path)) onChange(path);
+    };
+    const vault = this.app.vault,
+      workspace = this.app.workspace,
+      events = [
+        vault.on('create', (file) => changed(file.path)),
+        vault.on('modify', (file) => changed(file.path)),
+        vault.on('delete', (file) => changed(file.path)),
+        vault.on('rename', (file, oldPath) => {
+          changed(oldPath);
+          changed(file.path);
+        }),
+      ],
+      editor = workspace.on('editor-change', (_editor, info) => {
+        if (info.file) changed(info.file.path);
+      });
+    return () => {
+      events.forEach((event) => vault.offref(event));
+      workspace.offref(editor);
+    };
   }
   async readBinary(path: string): Promise<ArrayBuffer> {
     await this.guard(path);

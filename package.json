@@ -1,6 +1,6 @@
 {
   "name": "attachment-atlas",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "private": true,
   "description": "Reference-aware image cleanup for Obsidian.",
   "type": "module",
@@ -24,6 +24,7 @@
     "check:compat": "node scripts/check-compat.mjs",
     "lint": "eslint src tests",
     "test": "vitest run",
+    "bench:perf": "node scripts/benchmark-performance.mjs",
     "build": "npm run typecheck && node esbuild.config.mjs production",
     "check:docs": "python3 scripts/check_docs.py",
     "check:release": "node scripts/check-release.mjs",

@@ -148,7 +148,12 @@ describe('read-only Excalidraw reference indexing', () => {
     );
     await expect(new OperationService(vault, digest).execute(plan, result)).resolves.toMatchObject({
       outcome: 'failed',
-      issue: { detail: 'Reference sources changed. Scan again.' },
+      issue: {
+        detail: {
+          template: 'Document changed during execution: {path}',
+          values: { path: 'map.excalidraw.md' },
+        },
+      },
     });
     expect(vault.removed).toEqual([]);
   });

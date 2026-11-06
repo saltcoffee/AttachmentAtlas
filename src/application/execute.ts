@@ -7,7 +7,7 @@ import {
   type VaultPort,
 } from '../domain/model';
 import { retiringImages, retainedImages } from '../domain/operation-plan';
-import { scan, unreferencedReasons } from './scan';
+import { scan } from './scan';
 import { AtlasError, asMessage, errorDetail, message, type Text } from '../domain/messages';
 import { OperationCancelled, checkCancelled, yieldToHost } from './cancellation';
 import { validatePlan } from './plan';
@@ -33,6 +33,7 @@ export class OperationService {
     assert(!this.running, 'Another operation is running.');
     const record = new ExecutionRecorder(plan);
     this.running = true;
+    let verifier: ExecutionVerifier | undefined;
     const completed = new Set<string>(),
       removed = new Set<string>();
     const report = (text: Text) => {
@@ -56,48 +57,47 @@ export class OperationService {
       assert(snapshot.revision === plan.revision, 'Scan changed. Preview a new plan.');
       validatePlan(snapshot, plan);
       record.stage = 'preflight';
-      report('Rechecking all images and reference sources.');
-      const fresh = await scan(this.vault, this.hash, {
-        revision: snapshot.revision,
-        settings: snapshot.settings,
-        signal,
-        progress: report,
-      });
-      assert(!fresh.blockers.length, 'Reference coverage changed.');
-      const baselines = new Map(plan.baseline.map((source) => [source.path, source.digest]));
-      assert(
-        fresh.sources.length === baselines.size &&
-          fresh.sources.every((source) => baselines.get(source.path) === source.digest),
-        'Reference sources changed. Scan again.',
-      );
-      const originalPaths = new Set(snapshot.files.map((file) => file.path));
-      assert(
-        fresh.files.length === originalPaths.size &&
-          fresh.files.every((file) => originalPaths.has(file.path)),
-        'Active vault files changed during cleanup.',
-      );
-      const originalSources = new Map(snapshot.sources.map((source) => [source.path, source.text]));
-      assert(
-        fresh.sources.every((source) => originalSources.get(source.path) === source.text),
-        'Reference sources changed. Scan again.',
-      );
-      const current = new Map(fresh.media.map((image) => [image.path, image]));
-      const keeps = new Set(retainedImages(plan).map((image) => image.path));
-      for (const image of [...retiringImages(plan), ...retainedImages(plan)]) {
-        const item = current.get(image.path);
+      if (plan.kind === 'merge-exact') {
+        report('Rechecking all images and reference sources.');
+        const fresh = await scan(this.vault, this.hash, {
+          revision: snapshot.revision,
+          settings: snapshot.settings,
+          signal,
+          progress: report,
+        });
+        assert(!fresh.blockers.length, 'Reference coverage changed.');
+        const baselines = new Map(plan.baseline.map((source) => [source.path, source.digest]));
         assert(
-          item?.digest === image.digest &&
-            item.size === image.size &&
-            (keeps.has(image.path) || !item.reasons.length),
-          message('Image changed or is protected: {path}', { path: image.path }),
+          fresh.sources.length === baselines.size &&
+            fresh.sources.every((source) => baselines.get(source.path) === source.digest),
+          'Reference sources changed. Scan again.',
         );
-        if (plan.kind === 'recycle-unreferenced')
+        const originalPaths = new Set(snapshot.files.map((file) => file.path));
+        assert(
+          fresh.files.length === originalPaths.size &&
+            fresh.files.every((file) => originalPaths.has(file.path)),
+          'Active vault files changed during cleanup.',
+        );
+        const originalSources = new Map(
+          snapshot.sources.map((source) => [source.path, source.text]),
+        );
+        assert(
+          fresh.sources.every((source) => originalSources.get(source.path) === source.text),
+          'Reference sources changed. Scan again.',
+        );
+        const current = new Map(fresh.media.map((image) => [image.path, image]));
+        const keeps = new Set(retainedImages(plan).map((image) => image.path));
+        for (const image of [...retiringImages(plan), ...retainedImages(plan)]) {
+          const item = current.get(image.path);
           assert(
-            !unreferencedReasons(item, fresh).length,
-            message('Image is no longer recyclable: {path}', { path: image.path }),
+            item?.digest === image.digest &&
+              item.size === image.size &&
+              (keeps.has(image.path) || !item.reasons.length),
+            message('Image changed or is protected: {path}', { path: image.path }),
           );
+        }
       }
-      const verifier = new ExecutionVerifier(this.vault, plan, snapshot);
+      verifier = new ExecutionVerifier(this.vault, plan, snapshot);
       record.stage = 'prove-groups';
       if (plan.kind === 'merge-exact')
         for (const group of plan.groups) {
@@ -151,19 +151,21 @@ export class OperationService {
       checkCancelled(signal);
       record.path = undefined;
       record.stage = 'verify-references';
-      await verifier.verify(completed, removed, signal, true);
+      if (plan.kind === 'merge-exact') await verifier.verify(completed, removed, signal, true);
       record.stage = 'remove';
       for (const image of retiringImages(plan)) {
         record.path = image.path;
         checkCancelled(signal);
+        if (plan.kind === 'recycle-unreferenced') report('Checking reference sources.');
         await verifier.verify(completed, removed, signal, true);
         const data = await this.vault.readBinary(image.path);
         assert(
           data.byteLength === image.size && (await digest(data)) === image.digest,
           'Image changed immediately before recycling.',
         );
-        checkCancelled(signal);
         report(message('Recycling image: {path}', { path: image.path }));
+        if (plan.kind === 'recycle-unreferenced') verifier.assertUnchanged(removed);
+        checkCancelled(signal);
         record.images.set(image.path, 'unconfirmed');
         await this.vault.remove(image.path);
         assert(!(await this.vault.exists(image.path)), 'Image still exists after recycling.');
@@ -195,6 +197,7 @@ export class OperationService {
       );
     } finally {
       this.running = false;
+      verifier?.dispose();
     }
   }
 }

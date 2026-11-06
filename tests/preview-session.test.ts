@@ -6,7 +6,7 @@ import { OrganizerView } from '../src/ui/organizer-view';
 import type { PlanRequest } from '../src/application/plan';
 import type { Plan, Snapshot } from '../src/domain/model';
 import * as scans from '../src/application/scan';
-import { MemoryVault, PNG, recyclePlan, snapshot } from './helpers';
+import { MemoryVault, PNG, mergePlan, recyclePlan, snapshot } from './helpers';
 import { UiElement } from './ui-elements';
 
 const host = vi.hoisted(() => ({
@@ -77,7 +77,7 @@ function deferred() {
   });
   return { promise, resolve, reject };
 }
-async function setup() {
+async function setup(merge = false) {
   const callbacks = new Map<string, () => void>();
   const leaves: { view: OrganizerView }[] = [];
   const app = {
@@ -92,29 +92,47 @@ async function setup() {
   } as unknown as App;
   const plugin = new AttachmentAtlas(app, {} as PluginManifest);
   await plugin.onload();
-  const result = await snapshot(new MemoryVault({ 'unused.png': PNG }));
+  const result = await snapshot(new MemoryVault({ 'unused.png': PNG, 'keep.png': PNG }));
   result.revision = 0;
   const scanId = plugin.selection.beginScan();
   plugin.snapshot = result;
   plugin.selection.acceptSnapshot(scanId, result);
-  plugin.selection.setUnreferencedSelected(['unused.png'], true);
+  const plan = merge
+    ? mergePlan(result, ['unused.png'], 'keep.png')
+    : recyclePlan(result, ['unused.png']);
+  if (plan.kind === 'merge-exact') {
+    const group = plan.groups[0]!;
+    plugin.selection.setKeep(group.groupKey, group.keep.path);
+    plugin.selection.setGroupSelected(group.groupKey, ['unused.png'], true);
+  } else plugin.selection.setUnreferencedSelected(['unused.png'], true);
   const view = new OrganizerView({ app } as unknown as WorkspaceLeaf, plugin);
   leaves.push({ view });
   await view.onOpen();
   const request = (): PlanRequest => ({
     scanId: plugin.selection.state.scanId,
     selectionRevision: plugin.selection.state.selectionRevision,
-    selection: { kind: 'recycle-unreferenced', retirePaths: ['unused.png'] },
+    selection:
+      plan.kind === 'merge-exact'
+        ? {
+            kind: 'merge-exact',
+            groups: plan.groups.map((group) => ({
+              groupKey: group.groupKey,
+              keepPath: group.keep.path,
+              retirePaths: group.retire.map((image) => image.path),
+            })),
+          }
+        : { kind: 'recycle-unreferenced', retirePaths: ['unused.png'] },
   });
-  const plan = recyclePlan(result, ['unused.png']);
   const root = view.contentEl as unknown as UiElement;
   return { plugin, view, root, callbacks, request, plan, leaves };
 }
 function consent(modal: { contentEl: UiElement }) {
   const field = modal.contentEl.all().find((element) => element.attrs.type === 'checkbox')!;
-  field.checked = true;
-  field.onchange?.();
-  return modal.contentEl.all().find((element) => element.text === 'Delete 1 images')!;
+  if (field) {
+    field.checked = true;
+    field.onchange?.();
+  }
+  return modal.contentEl.all().find((element) => element.dataset.focusKey === 'plan-confirm')!;
 }
 
 beforeEach(() => {
@@ -271,13 +289,8 @@ describe('preview session boundaries', () => {
     }
   });
   it('revokes the token and ignores both cached button and confirmation callbacks after cancel', async () => {
-    const ui = await setup(),
-      build = deferred();
-    host.build.mockReturnValue(build.promise);
-    const pending = ui.plugin.preview(ui.view, ui.request());
-    await vi.advanceTimersByTimeAsync(1);
-    build.resolve(ui.plan);
-    await pending;
+    const ui = await setup();
+    await ui.plugin.preview(ui.view, ui.request());
     const modal = host.modals[0]!,
       button = consent(modal),
       click = button.onclick!;
@@ -293,12 +306,16 @@ describe('preview session boundaries', () => {
 
   it('accepts a genuine confirmation once, without treating its close event as cancellation', async () => {
     const ui = await setup();
-    host.build.mockResolvedValue(ui.plan);
     const pending = ui.plugin.preview(ui.view, ui.request());
-    await vi.advanceTimersByTimeAsync(1);
-    await pending;
+    expect(host.modals).toHaveLength(1);
     const modal = host.modals[0]!,
       button = consent(modal);
+    expect(host.build).not.toHaveBeenCalled();
+    expect(modal.contentEl.contents()).toContain('Confirm image recycling');
+    expect(modal.contentEl.contents()).toContain('unused.png');
+    expect(modal.contentEl.all().some((element) => element.attrs.type === 'checkbox')).toBe(false);
+    expect(button.disabled).toBe(false);
+    await pending;
     button.onclick?.();
     button.onclick?.();
     await Promise.resolve();
@@ -306,8 +323,24 @@ describe('preview session boundaries', () => {
     expect(host.execute.mock.calls[0]![0]).toEqual(ui.plan);
   });
 
+  it.each(['selection', 'vault', 'view'] as const)(
+    'revokes the recycling confirmation after a %s change',
+    async (change) => {
+      const ui = await setup();
+      await ui.plugin.preview(ui.view, ui.request());
+      const button = consent(host.modals[0]!),
+        click = button.onclick!;
+      if (change === 'selection') ui.plugin.selection.clearUnreferenced();
+      if (change === 'vault') ui.callbacks.get('modify')!();
+      if (change === 'view') await ui.view.onClose();
+      click();
+      await Promise.resolve();
+      expect(host.execute).not.toHaveBeenCalled();
+    },
+  );
+
   it('paints construction feedback before starting work and cancels without losing selection', async () => {
-    const ui = await setup(),
+    const ui = await setup(true),
       build = deferred();
     host.build.mockReturnValue(build.promise);
     const before = ui.plugin.selection.state,
@@ -329,12 +362,12 @@ describe('preview session boundaries', () => {
   it.each(['selection', 'vault', 'scan', 'view', 'filter'] as const)(
     'drops a result after %s invalidation',
     async (change) => {
-      const ui = await setup(),
+      const ui = await setup(true),
         build = deferred();
       host.build.mockReturnValue(build.promise);
       const pending = ui.plugin.preview(ui.view, ui.request());
       await vi.advanceTimersByTimeAsync(1);
-      if (change === 'selection') ui.plugin.selection.clearUnreferenced();
+      if (change === 'selection') ui.plugin.selection.clearMergeSelection();
       if (change === 'vault') ui.callbacks.get('modify')!();
       if (change === 'scan') {
         ui.plugin.snapshot = null;
@@ -359,7 +392,7 @@ describe('preview session boundaries', () => {
   );
 
   it('keeps the newer preview when an older request fails late', async () => {
-    const ui = await setup(),
+    const ui = await setup(true),
       older = deferred(),
       newer = deferred();
     host.build.mockReturnValueOnce(older.promise).mockReturnValueOnce(newer.promise);
@@ -379,7 +412,7 @@ describe('preview session boundaries', () => {
   });
 
   it('leaves an accepted build running when another request is rejected before construction', async () => {
-    const ui = await setup(),
+    const ui = await setup(true),
       build = deferred();
     host.build.mockReturnValue(build.promise);
     const pending = ui.plugin.preview(ui.view, ui.request());
@@ -393,7 +426,7 @@ describe('preview session boundaries', () => {
   });
 
   it('retries a failed build with the retained selection', async () => {
-    const ui = await setup();
+    const ui = await setup(true);
     host.build.mockRejectedValueOnce(new Error('Worker failed')).mockResolvedValueOnce(ui.plan);
     const before = ui.plugin.selection.state,
       pending = ui.plugin.preview(ui.view, ui.request());
