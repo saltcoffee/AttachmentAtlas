@@ -1,0 +1,587 @@
+{
+  "schema": 1,
+  "recordedAt": "2026-11-06T06:09:14.091Z",
+  "scope": "Node application functions; warm filesystem cache; no analysis cache; sequential successful rounds; no native UI, Worker transfer or FileManager. Memory values include the fixture harness and are not memory peaks.",
+  "fixtures": "Generated content is removed. Parameters, generator version and inventory digests reproduce the inputs. Baseline reports predate index statistics; no index mode is inferred for them.",
+  "sourceChecksums": {
+    "src/application/cancellation.ts": "a32a082ba156672c0180c597e01150c30e95f56f2d9691484d014722b9b297a2",
+    "src/application/execute-validation.ts": "77d924cb048a2344914002f5faa573dfe04c1896c6a0cf6a811e7aa8edbe24d5",
+    "src/application/execute.ts": "c860c51c3624bacf2e672aa6454888991e33efcd8d46f039926a75eafe3182f1",
+    "src/application/execution-result.ts": "87b4e6e2623c3978bc5a522359d1876c2377981c301031ae7f0174d1e8cf2d38",
+    "src/application/organizer-selection.ts": "6c003aba00d38330f2d237e898e1c4c7ed2f3088a98f5f8d1b6ee374c42cdccd",
+    "src/application/plan.ts": "a6ac6a6fe71c7441b5342cc9aefc8db4fdc5cb01dde5fa3b2507665002ade29a",
+    "src/application/reference-index.ts": "01590f5196e938002bcd45db3ab1286bdbc14f2b486a3b81b5012be14294c78e",
+    "src/application/scan.ts": "73f518fd29f9da0c49affb926aa668fa2bfe004e18a768ee9584b6cc76b3fcce",
+    "src/domain/image.ts": "ef2897b65d84eae8323738fc98570b3cf45b5afbdf065f0c75ef441cc41efb46",
+    "src/domain/messages.ts": "c5fb970fc5b091433b443cacd3a8d215e35018ae54e7aa8955fe00d41f93a8c2",
+    "src/domain/model.ts": "ba6a8b37cf9706d5fb93ce42efa139dfed646f858d3d26dd5d0662eb2a63fcef",
+    "src/domain/operation-limits.ts": "dc4937b092556a9ee49563f079368cd42d3b8d79bcfbbc28028d5f7b0a789ba7",
+    "src/domain/operation-plan.ts": "9315d02973810bf78a785d937fa4ca2673af6d41aae5fef3b15b53407ba3b954",
+    "src/domain/paths.ts": "7f7b5d7bba239fc73b6abac3137d118b53c271d0e052c89cf510d65b29e39a24",
+    "src/i18n/index.ts": "001815754dde25282ed6d64cac77f0b21689945299b6e025e3f1fdebbac99a33",
+    "src/i18n/zh-diagnostics.ts": "f422c2943eb69a998be9da70a0e9a85fad069da904798fe62f3cfb8e4e7132b1",
+    "src/i18n/zh.ts": "b49e3a3813d14d41441a063712387093676215d388a4541caec45c9590b79979",
+    "src/infrastructure/hash-client.ts": "56a091047fbb38b2d9085d43293d5b4e802c135a395ae0d392bcf13c4b35b86e",
+    "src/infrastructure/obsidian-vault.ts": "9ea43cbab20116a7351ba3bec2a998d0b0517079bd994a7a24b2fa2f701805b6",
+    "src/infrastructure/plan-client.ts": "18235f246d3ea1f607ac8e32ddb20f5bedbb8b6094bc2b142bcfb0df1d601368",
+    "src/infrastructure/plan-protocol.ts": "f306976ccc24c9dbeecab1419c75c96dc3510a3a15fc580e1eea2c0446193def",
+    "src/infrastructure/settings.ts": "a78cc4e0e2e21ac31cc9f36dc48292afa85afc9b450fe4b5e4bd912f1e15112e",
+    "src/main.ts": "9f290e19bc7e933d4119ae2e61093425643dc92461ceb39a603381676a374c67",
+    "src/references/canvas.ts": "1c21ac16a6aa02e68fed8d6a9c1473ade830e317f7ecb65c20faa558592b9ad0",
+    "src/references/excalidraw-compression.ts": "bf967deafe71790fdccca1320e52744cdfd904d8ed2635509a7b8445a19e2898",
+    "src/references/excalidraw.ts": "a883739a807926e3ec41f49dd73ea29471386440a7889b4b6e8179b6f401ce3a",
+    "src/references/index.ts": "3a216f997038ca3952cec525556a94f255c8d45ca3dd2fa6d00fe335d4fee381",
+    "src/references/markdown.ts": "49700dd0a30b5cd1658f74b0f2258f9503bbb4eff970d1ff5eceb5798c092641",
+    "src/references/urls.ts": "09ef65dfe2c9cb4b15b38dbcc00eb8b4b8a1c278049e07843074c96a2a703da5",
+    "src/ui/focus.ts": "f1bfc7d5f37359cef2555ae9c1ae5034228bf0d24dec31f475291b4a7a07c3ce",
+    "src/ui/i18n.ts": "3cfada27a57ad790883f0f01f83b71864cd1c4790cfb59c9f4eb7b09f6dbb75a",
+    "src/ui/modals.ts": "7728b24f28a476281a4254ab189ced0c32cfb02fef10d383b07fa265e96a18fd",
+    "src/ui/operation-result.ts": "0ef1eddd2564273c18a7b9f9f2a0a4c0a000a6f9ee14991771315e8a66f7f115",
+    "src/ui/organizer-duplicate-results.ts": "be7a65d91636e87aada0dd3eb9685c2121eb060d6a76805fe32bc4ab9d908cbd",
+    "src/ui/organizer-filters.ts": "e33d58b27e0c9a88fa2b59ae69ba0111621dad5d34d349b7099fb61795c2b1b6",
+    "src/ui/organizer-group-card.ts": "aef92ecb4524d58b46fd79ce1bb6ffb3ca8bf8b020dbd52481f85e754306216c",
+    "src/ui/organizer-image-results.ts": "ac01e38dd124af9c86e4275355918465e719778fb700e0c5cc77339275c957ac",
+    "src/ui/organizer-query.ts": "342e33ea8a0ab1610beabbbcb4bca53b6ba10b0476e00645b3f4cbe65bfb8e6e",
+    "src/ui/organizer-result-context.ts": "67732b64f9cad7c7f594aa78332ce23346141db7a149b9442e034db9def5024e",
+    "src/ui/organizer-results.ts": "d8ac8082bd5b8bd6cd4e311e8f631726e1ef6df66eac852e0df8c326a5350511",
+    "src/ui/organizer-state.ts": "f77a23d39b3f8eeef2b9371085b62edd33b30969c3781cdeb736a51df5f1cb0b",
+    "src/ui/organizer-view.ts": "94b1e1575d76a951c10a637b11079a65cbe4dccfe975827f80c708706eac3557",
+    "src/ui/plan-preview.ts": "5fabc7a655d5845ff1422d9bdfb2a99faeaa3a75f1237ba285179ccd95c58770",
+    "src/ui/reconcile-elements.ts": "cda1a777876089f7fae688c95dfae4586175c07a644b90d046c10f00faeb45bd",
+    "src/ui/settings-tab.ts": "97cdeed3742cb6b53e94f0917bf975547ec1fd144feca2a6c90f7b38322e75c7",
+    "src/workers/hash-worker.ts": "4027478059984b2fe5b6d523ae08789f475d9380f205ed81460ce6b95726072e",
+    "src/workers/plan-worker.ts": "053cf3fdc75014a34ff67f7389ca8a0a5bd0796f73aa82f19bdf48eb60af70ab",
+    "scripts/benchmark-performance.mjs": "9e28fd5c76db9fb7dbe8cf69b42e1a8b10ede9b5f5f89b01ea6253248c7b339e",
+    "scripts/performance-module.mjs": "9fe427fcc61c8125e9a23fcc9c8f224a1c549e30e66a93c595abc3a0ade9080e",
+    "scripts/performance-fixture.mjs": "db62cfa727e41d6ad6b0df83dcb8631257b7c1c487bb34481f562f5f19bc6a5e",
+    "scripts/performance-images.mjs": "79e28500a5af00d77d2af4f79e80ea586beca74d9d1b442d22161a2f513203f6",
+    "scripts/performance-temp.mjs": "4ae4d9c4a6bfff0fc9ec5ed88417e2302fd2d7a15a9c6b3e76e182bf83a8b005",
+    "scripts/benchmark-result.mjs": "afb8af7445d904cb161eda567d96799df3b29349314d43991a24017659201512",
+    "package-lock.json": "261c0659960fb2faad60ead32553060752aa91ba0a380a99ee178d368e6f790a"
+  },
+  "comparisons": [
+    {
+      "sample": "B18-S1K",
+      "baseline": {
+        "rawReportSHA256": "380d1470e7654db9c2ea124ee51e77723b1d330943c426eb745a6f6e7ef44962",
+        "measuredAt": "2026-11-06T05:14:33.930Z",
+        "command": "node scripts/benchmark-performance.mjs --implementation=baseline --sample=B18-S1K --task=scan --repetitions=3 --timeout-ms=60000",
+        "source": {
+          "revision": "b3d93813562ee848fa8156fe5a89a9f188f7a533",
+          "bundle": "artifacts/v0.1.8-baseline-b3d9381-733762622617.cjs",
+          "digest": "733762622617bab3ff02e1a0b9faba26f456a4b519e99c8888c55b034fa05b1c",
+          "instrumentation": 1,
+          "frozenAt": "2026-11-06T05:00:05.121Z",
+          "dependencyDigest": "261c0659960fb2faad60ead32553060752aa91ba0a380a99ee178d368e6f790a",
+          "scope": "Production application functions with parse/digest observation wrappers; native UI and FileManager are not included."
+        },
+        "environment": {
+          "node": "v26.13.0",
+          "system": "darwin 27.2.0",
+          "cpu": "Apple M5 Pro",
+          "memoryBytes": 51539607552
+        },
+        "fixture": {
+          "images": 1000,
+          "sources": 1000,
+          "bytes": 536870912,
+          "groups": 50,
+          "unused": 100,
+          "imageSize": 1048576,
+          "formats": {
+            "png": 700,
+            "jpg": 150,
+            "webp": 150
+          },
+          "sourceBytes": 4096000,
+          "digest": "008bb011a269488ec7cc067c103f7e5b4e5f8ca6599f2c984121362759532896",
+          "generator": 2
+        },
+        "cleanup": {
+          "state": "removed-after-historical-run"
+        },
+        "summary": {
+          "successfulRounds": 3,
+          "timing": {
+            "scanMs": {
+              "median": 1053.82325,
+              "worst": 1070.415708
+            },
+            "planMs": null,
+            "executeMs": null,
+            "totalMs": {
+              "median": 1053.9230829999997,
+              "worst": 1070.541458
+            }
+          }
+        },
+        "rounds": [
+          {
+            "repeat": 1,
+            "outcome": "completed",
+            "scanMs": 1070.415708,
+            "totalMs": 1070.541458,
+            "scan": {
+              "readTextCalls": 1000,
+              "readBinaryCalls": 1000,
+              "sourceBytes": 4096000,
+              "imageBytes": 536870912,
+              "parseCalls": 1000,
+              "digestCalls": 2000,
+              "cpuMicroseconds": {
+                "user": 1240473,
+                "system": 118818
+              },
+              "referenceIndex": null
+            }
+          },
+          {
+            "repeat": 2,
+            "outcome": "completed",
+            "scanMs": 1048.9002080000002,
+            "totalMs": 1048.9867499999998,
+            "scan": {
+              "readTextCalls": 1000,
+              "readBinaryCalls": 1000,
+              "sourceBytes": 4096000,
+              "imageBytes": 536870912,
+              "parseCalls": 1000,
+              "digestCalls": 2000,
+              "cpuMicroseconds": {
+                "user": 1136568,
+                "system": 111964
+              },
+              "referenceIndex": null
+            }
+          },
+          {
+            "repeat": 3,
+            "outcome": "completed",
+            "scanMs": 1053.82325,
+            "totalMs": 1053.9230829999997,
+            "scan": {
+              "readTextCalls": 1000,
+              "readBinaryCalls": 1000,
+              "sourceBytes": 4096000,
+              "imageBytes": 536870912,
+              "parseCalls": 1000,
+              "digestCalls": 2000,
+              "cpuMicroseconds": {
+                "user": 1178782,
+                "system": 110883
+              },
+              "referenceIndex": null
+            }
+          }
+        ]
+      },
+      "current": {
+        "rawReportSHA256": "eddcffa305642d6f258904a75c4e2f262884e5eeaf08ec2dbcb40bdb2a07f912",
+        "measuredAt": "2026-11-06T06:07:06.278Z",
+        "command": "node scripts/benchmark-performance.mjs --implementation=current --sample=B18-S1K --task=scan --repetitions=3 --timeout-ms=60000",
+        "source": {
+          "digest": "fdf83dd296db40fc26cc3c15da07ab4578eace66cebe25698e3dabb14172dcd6",
+          "instrumentation": 1,
+          "revision": "b3d93813562ee848fa8156fe5a89a9f188f7a533",
+          "workingTree": true
+        },
+        "environment": {
+          "node": "v26.13.0",
+          "system": "darwin 27.2.0",
+          "cpu": "Apple M5 Pro",
+          "memoryBytes": 51539607552
+        },
+        "fixture": {
+          "images": 1000,
+          "sources": 1000,
+          "bytes": 536870912,
+          "groups": 50,
+          "unused": 100,
+          "imageSize": 1048576,
+          "formats": {
+            "png": 700,
+            "jpg": 150,
+            "webp": 150
+          },
+          "sourceBytes": 4096000,
+          "digest": "008bb011a269488ec7cc067c103f7e5b4e5f8ca6599f2c984121362759532896",
+          "generator": 2
+        },
+        "cleanup": {
+          "state": "removed"
+        },
+        "summary": {
+          "successfulRounds": 3,
+          "timing": {
+            "scanMs": {
+              "median": 524.358583,
+              "worst": 557.2082919999999
+            },
+            "planMs": null,
+            "executeMs": null,
+            "totalMs": {
+              "median": 524.4548750000001,
+              "worst": 557.3471670000001
+            }
+          }
+        },
+        "rounds": [
+          {
+            "repeat": 1,
+            "outcome": "completed",
+            "scanMs": 557.2082919999999,
+            "totalMs": 557.3471670000001,
+            "scan": {
+              "readTextCalls": 1000,
+              "readBinaryCalls": 1000,
+              "sourceBytes": 4096000,
+              "imageBytes": 536870912,
+              "parseCalls": 1000,
+              "digestCalls": 2000,
+              "cpuMicroseconds": {
+                "user": 737762,
+                "system": 119539
+              },
+              "referenceIndex": {
+                "mode": "indexed",
+                "fallbackReason": null,
+                "pathCount": 1000,
+                "hintCount": 1700,
+                "stateCount": 4522,
+                "estimatedBytes": 1820148,
+                "patternUnits": 9850
+              }
+            }
+          },
+          {
+            "repeat": 2,
+            "outcome": "completed",
+            "scanMs": 524.358583,
+            "totalMs": 524.4548750000001,
+            "scan": {
+              "readTextCalls": 1000,
+              "readBinaryCalls": 1000,
+              "sourceBytes": 4096000,
+              "imageBytes": 536870912,
+              "parseCalls": 1000,
+              "digestCalls": 2000,
+              "cpuMicroseconds": {
+                "user": 657647,
+                "system": 106932
+              },
+              "referenceIndex": {
+                "mode": "indexed",
+                "fallbackReason": null,
+                "pathCount": 1000,
+                "hintCount": 1700,
+                "stateCount": 4522,
+                "estimatedBytes": 1820148,
+                "patternUnits": 9850
+              }
+            }
+          },
+          {
+            "repeat": 3,
+            "outcome": "completed",
+            "scanMs": 502.1450419999999,
+            "totalMs": 502.2272079999998,
+            "scan": {
+              "readTextCalls": 1000,
+              "readBinaryCalls": 1000,
+              "sourceBytes": 4096000,
+              "imageBytes": 536870912,
+              "parseCalls": 1000,
+              "digestCalls": 2000,
+              "cpuMicroseconds": {
+                "user": 612586,
+                "system": 91048
+              },
+              "referenceIndex": {
+                "mode": "indexed",
+                "fallbackReason": null,
+                "pathCount": 1000,
+                "hintCount": 1700,
+                "stateCount": 4522,
+                "estimatedBytes": 1820148,
+                "patternUnits": 9850
+              }
+            }
+          }
+        ]
+      },
+      "medianReductionPercent": 50.242264725132976
+    },
+    {
+      "sample": "B18-L10K",
+      "baseline": {
+        "rawReportSHA256": "9a4c1f7e421a4f92479f4816730f0d88f7f5061a7759096fbaeb671b11566e7e",
+        "measuredAt": "2026-11-06T05:18:30.201Z",
+        "command": "node scripts/benchmark-performance.mjs --implementation=baseline --sample=B18-L10K --task=scan --repetitions=3 --timeout-ms=180000",
+        "source": {
+          "revision": "b3d93813562ee848fa8156fe5a89a9f188f7a533",
+          "bundle": "artifacts/v0.1.8-baseline-b3d9381-733762622617.cjs",
+          "digest": "733762622617bab3ff02e1a0b9faba26f456a4b519e99c8888c55b034fa05b1c",
+          "instrumentation": 1,
+          "frozenAt": "2026-11-06T05:00:05.121Z",
+          "dependencyDigest": "261c0659960fb2faad60ead32553060752aa91ba0a380a99ee178d368e6f790a",
+          "scope": "Production application functions with parse/digest observation wrappers; native UI and FileManager are not included."
+        },
+        "environment": {
+          "node": "v26.13.0",
+          "system": "darwin 27.2.0",
+          "cpu": "Apple M5 Pro",
+          "memoryBytes": 51539607552
+        },
+        "fixture": {
+          "images": 10000,
+          "sources": 10000,
+          "bytes": 5368709120,
+          "groups": 500,
+          "unused": 100,
+          "imageSize": 1048576,
+          "formats": {
+            "png": 6640,
+            "jpg": 1680,
+            "webp": 1680
+          },
+          "sourceBytes": 40960000,
+          "digest": "9d6e7a2e397e7beb73399793d554f93e13185df56aa7ee12ab8bea0fdd467f5c",
+          "generator": 2
+        },
+        "cleanup": {
+          "state": "removed-after-historical-run"
+        },
+        "summary": {
+          "successfulRounds": 3,
+          "timing": {
+            "scanMs": {
+              "median": 63893.666708000004,
+              "worst": 64766.251124999995
+            },
+            "planMs": null,
+            "executeMs": null,
+            "totalMs": {
+              "median": 63893.971667000005,
+              "worst": 64766.486999999994
+            }
+          }
+        },
+        "rounds": [
+          {
+            "repeat": 1,
+            "outcome": "completed",
+            "scanMs": 61809.37262499999,
+            "totalMs": 61809.609291,
+            "scan": {
+              "readTextCalls": 10000,
+              "readBinaryCalls": 10000,
+              "sourceBytes": 40960000,
+              "imageBytes": 5368709120,
+              "parseCalls": 10000,
+              "digestCalls": 20000,
+              "cpuMicroseconds": {
+                "user": 60972174,
+                "system": 1631866
+              },
+              "referenceIndex": null
+            }
+          },
+          {
+            "repeat": 2,
+            "outcome": "completed",
+            "scanMs": 63893.666708000004,
+            "totalMs": 63893.971667000005,
+            "scan": {
+              "readTextCalls": 10000,
+              "readBinaryCalls": 10000,
+              "sourceBytes": 40960000,
+              "imageBytes": 5368709120,
+              "parseCalls": 10000,
+              "digestCalls": 20000,
+              "cpuMicroseconds": {
+                "user": 62978312,
+                "system": 1596860
+              },
+              "referenceIndex": null
+            }
+          },
+          {
+            "repeat": 3,
+            "outcome": "completed",
+            "scanMs": 64766.251124999995,
+            "totalMs": 64766.486999999994,
+            "scan": {
+              "readTextCalls": 10000,
+              "readBinaryCalls": 10000,
+              "sourceBytes": 40960000,
+              "imageBytes": 5368709120,
+              "parseCalls": 10000,
+              "digestCalls": 20000,
+              "cpuMicroseconds": {
+                "user": 63762375,
+                "system": 1431905
+              },
+              "referenceIndex": null
+            }
+          }
+        ]
+      },
+      "current": {
+        "rawReportSHA256": "a09e31e0b90da0b674290180e8da3418eed9942f20164c9a4d6a80ddb2751518",
+        "measuredAt": "2026-11-06T06:07:12.070Z",
+        "command": "node scripts/benchmark-performance.mjs --implementation=current --sample=B18-L10K --task=scan --repetitions=3 --timeout-ms=180000",
+        "source": {
+          "digest": "fdf83dd296db40fc26cc3c15da07ab4578eace66cebe25698e3dabb14172dcd6",
+          "instrumentation": 1,
+          "revision": "b3d93813562ee848fa8156fe5a89a9f188f7a533",
+          "workingTree": true
+        },
+        "environment": {
+          "node": "v26.13.0",
+          "system": "darwin 27.2.0",
+          "cpu": "Apple M5 Pro",
+          "memoryBytes": 51539607552
+        },
+        "fixture": {
+          "images": 10000,
+          "sources": 10000,
+          "bytes": 5368709120,
+          "groups": 500,
+          "unused": 100,
+          "imageSize": 1048576,
+          "formats": {
+            "png": 6640,
+            "jpg": 1680,
+            "webp": 1680
+          },
+          "sourceBytes": 40960000,
+          "digest": "9d6e7a2e397e7beb73399793d554f93e13185df56aa7ee12ab8bea0fdd467f5c",
+          "generator": 2
+        },
+        "cleanup": {
+          "state": "removed"
+        },
+        "summary": {
+          "successfulRounds": 3,
+          "timing": {
+            "scanMs": {
+              "median": 5215.475875,
+              "worst": 5378.3600830000005
+            },
+            "planMs": null,
+            "executeMs": null,
+            "totalMs": {
+              "median": 5215.770667000001,
+              "worst": 5378.583334000001
+            }
+          }
+        },
+        "rounds": [
+          {
+            "repeat": 1,
+            "outcome": "completed",
+            "scanMs": 5378.3600830000005,
+            "totalMs": 5378.583334000001,
+            "scan": {
+              "readTextCalls": 10000,
+              "readBinaryCalls": 10000,
+              "sourceBytes": 40960000,
+              "imageBytes": 5368709120,
+              "parseCalls": 10000,
+              "digestCalls": 20000,
+              "cpuMicroseconds": {
+                "user": 8756898,
+                "system": 1171555
+              },
+              "referenceIndex": {
+                "mode": "indexed",
+                "fallbackReason": null,
+                "pathCount": 10000,
+                "hintCount": 17000,
+                "stateCount": 45151,
+                "estimatedBytes": 18177144,
+                "patternUnits": 99580
+              }
+            }
+          },
+          {
+            "repeat": 2,
+            "outcome": "completed",
+            "scanMs": 5215.475875,
+            "totalMs": 5215.770667000001,
+            "scan": {
+              "readTextCalls": 10000,
+              "readBinaryCalls": 10000,
+              "sourceBytes": 40960000,
+              "imageBytes": 5368709120,
+              "parseCalls": 10000,
+              "digestCalls": 20000,
+              "cpuMicroseconds": {
+                "user": 8388907,
+                "system": 1079361
+              },
+              "referenceIndex": {
+                "mode": "indexed",
+                "fallbackReason": null,
+                "pathCount": 10000,
+                "hintCount": 17000,
+                "stateCount": 45151,
+                "estimatedBytes": 18177144,
+                "patternUnits": 99580
+              }
+            }
+          },
+          {
+            "repeat": 3,
+            "outcome": "completed",
+            "scanMs": 5127.23475,
+            "totalMs": 5127.526791999999,
+            "scan": {
+              "readTextCalls": 10000,
+              "readBinaryCalls": 10000,
+              "sourceBytes": 40960000,
+              "imageBytes": 5368709120,
+              "parseCalls": 10000,
+              "digestCalls": 20000,
+              "cpuMicroseconds": {
+                "user": 7986099,
+                "system": 1056946
+              },
+              "referenceIndex": {
+                "mode": "indexed",
+                "fallbackReason": null,
+                "pathCount": 10000,
+                "hintCount": 17000,
+                "stateCount": 45151,
+                "estimatedBytes": 18177144,
+                "patternUnits": 99580
+              }
+            }
+          }
+        ]
+      },
+      "medianReductionPercent": 91.83725689302634
+    }
+  ],
+  "equivalence": {
+    "outcome": "passed",
+    "comparison": "Full scan Snapshot deep equality",
+    "measuredAt": "2026-11-06T06:09:16.224Z",
+    "baselineDigest": "733762622617bab3ff02e1a0b9faba26f456a4b519e99c8888c55b034fa05b1c",
+    "currentDigest": "fdf83dd296db40fc26cc3c15da07ab4578eace66cebe25698e3dabb14172dcd6",
+    "sampleDigest": "008bb011a269488ec7cc067c103f7e5b4e5f8ca6599f2c984121362759532896",
+    "cleanup": {
+      "state": "removed"
+    }
+  },
+  "legacyFixtureCleanup": {
+    "removedRoots": 60,
+    "files": 124474,
+    "bytes": 34192122980
+  },
+  "productionBuild": {
+    "bytes": 1296412,
+    "sha256": "e344d1977d0cdfb4682dbde767647f694c26dfb99f22eabbf6babbd398718422"
+  },
+  "roundMetrics": "Per-round application wall time, process CPU, actual read/hash/parse counts, bytes and index diagnostics. Full local reports are identified by SHA-256; process memory snapshots and method sub-timings are omitted here."
+}

@@ -12,6 +12,7 @@ export const zh = {
   'Ready to scan. All processing stays inside this vault.': '准备就绪，所有处理均在当前库内完成。',
   'Vault changed. Scan again before planning changes.': '库内容已变化，请重新扫描后再预览操作。',
   'Scan complete.': '扫描完成。',
+  'Building reference protection index.': '正在建立引用保护索引。',
   'Checking {current}/{total}: {path}': '正在检查 {current}/{total}：{path}',
   'Fingerprinting image {current}: {path}': '正在计算第 {current} 张图片的指纹：{path}',
   'Updating references: {path}': '正在更新引用：{path}',

@@ -11,16 +11,18 @@ import {
   type Source,
   type VaultPort,
 } from '../domain/model';
-import { active, basename, imagePath, sourcePath, within } from '../domain/paths';
+import { active, imagePath, sourcePath, within } from '../domain/paths';
 import { imageFormat, imageDimensions } from '../domain/image';
 import { parseSource, createReferenceResolver } from '../references';
 import { AtlasError, asMessage, errorDetail, message, type Text } from '../domain/messages';
 import { checkCancelled } from './cancellation';
+import { protectedImagePaths, type ReferenceIndexStats } from './reference-index';
 export interface ScanOptions {
   revision: number;
   settings: Settings;
   signal?: AbortSignal;
   progress?: (message: Text) => void;
+  referenceIndexStats?: (stats: Readonly<ReferenceIndexStats>) => void;
 }
 export async function scan(
   vault: VaultPort,
@@ -95,13 +97,27 @@ export async function scan(
   }
   const incoming = new Map<string, Source['references']>();
   const hints = sources.flatMap((source) => source.hints);
+  const images = files.filter((file) => imagePath(file.path));
+  let protectedPaths: ReadonlySet<string>;
+  try {
+    options.progress?.('Building reference protection index.');
+    protectedPaths = await protectedImagePaths(
+      images.map((file) => file.path),
+      hints,
+      options.signal,
+      options.referenceIndexStats,
+    );
+  } catch (error) {
+    check();
+    throw error;
+  }
   for (const source of sources)
     for (const reference of source.references) {
       const list = incoming.get(reference.target) ?? [];
       list.push(reference);
       incoming.set(reference.target, list);
     }
-  for (const [index, file] of files.filter((file) => imagePath(file.path)).entries()) {
+  for (const [index, file] of images.entries()) {
     check();
     options.progress?.(
       message('Fingerprinting image {current}: {path}', { current: index + 1, path: file.path }),
@@ -133,15 +149,7 @@ export async function scan(
       reasons.push('Outside the selected image scope.');
     if (options.settings.protectedPaths.some((folder) => within(file.path, folder)))
       reasons.push('Protected path.');
-    if (
-      hints.some(
-        (hint) =>
-          hint.includes(file.path) ||
-          hint.includes(basename(file.path)) ||
-          hint.includes(encodeURI(file.path)) ||
-          hint.includes(encodeURIComponent(basename(file.path))),
-      )
-    )
+    if (protectedPaths.has(file.path))
       reasons.push('Possible reference in unsupported syntax or plain text.');
     const references = incoming.get(file.path) ?? [];
     if (references.some((reference) => reference.readOnly))

@@ -24,6 +24,7 @@
     "check:compat": "node scripts/check-compat.mjs",
     "lint": "eslint src tests",
     "test": "vitest run",
+    "bench:perf": "node scripts/benchmark-performance.mjs",
     "build": "npm run typecheck && node esbuild.config.mjs production",
     "check:docs": "python3 scripts/check_docs.py",
     "check:release": "node scripts/check-release.mjs",
