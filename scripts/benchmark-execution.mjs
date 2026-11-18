@@ -77,7 +77,16 @@ const vault = {
     await writeFile(join(root, path), text);
     entries.set(path, { path, size: Buffer.byteLength(text), mtime: 0 });
   },
-  async remove(path) {
+  watchSourceChanges() {
+    return () => {};
+  },
+  assertBaseContextsClosed() {},
+  assertSourceContents() {},
+  watchFileChanges() {
+    return () => {};
+  },
+  async remove(path, beforeHostRemove = () => {}) {
+      beforeHostRemove();
     await rename(join(root, path), join(root, '.trash', path.split('/').at(-1)));
     entries.delete(path);
   },

@@ -194,8 +194,8 @@ describe('0.1.7 multi-group plans and shared reference writes', () => {
     const result = await service.execute(plan, state);
     expect(result.outcome).toBe('failed');
     expect(result.stoppedAt).toBe('rewrite');
-    expect(result.documents.map((doc) => doc.state)).toEqual(['verified', 'not-started']);
-    expect(result.groups.map((group) => group.state)).toEqual(['partial', 'partial']);
+    expect(result.documents.map((doc) => doc.state)).toEqual(['unconfirmed', 'not-started']);
+    expect(result.groups.map((group) => group.state)).toEqual(['unconfirmed', 'unconfirmed']);
     expect(vault.removed).toEqual([]);
   });
 });

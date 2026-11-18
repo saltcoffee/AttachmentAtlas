@@ -44,7 +44,7 @@ function setup(groupSizes: number[], imageSize = 1024) {
     files: groups.flat(),
     duplicates: groups,
     sources: [],
-    blockers: [],
+    coverageIssues: [],
   };
   const selection = new OrganizerSelection();
   selection.acceptSnapshot(selection.beginScan(), snapshot);
@@ -162,6 +162,7 @@ describe('organizer interaction regressions', () => {
         linkpath: group[1]!.path,
         target: group[1]!.path,
         style: 'wiki',
+        sourceKind: 'markdown',
         readOnly: false,
         start: 0,
         end: 1,
@@ -358,6 +359,7 @@ describe('organizer interaction regressions', () => {
       linkpath: image[0]!.path,
       target: image[0]!.path,
       style: 'wiki',
+      sourceKind: 'markdown',
       readOnly: false,
       start: 0,
       end: 1,

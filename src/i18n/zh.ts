@@ -217,6 +217,75 @@ export const zh = {
   'Operation failed: {detail}': '操作失败：{detail}',
   Unreferenced: '未引用',
   Unsupported: '不支持',
+  'Referenced by a Bases view. Retain this image; Bases references are read-only.':
+    '此图片被 Bases 视图引用，请保留此图片；Bases 引用仅支持读取，不会自动改写。',
+  'Referenced by a read-only source. Retain this image; these references are read-only.':
+    '此图片被只读来源引用，请保留此图片；这些引用仅支持读取，不会自动改写。',
+  'A Bases reference source uses a configuration this version cannot verify.':
+    '某 Bases 引用来源包含当前版本无法核对的配置。',
+  'A Bases formula uses a dynamic expression this version cannot verify.':
+    '某 Bases 公式包含当前版本无法核对的动态表达式。',
+  'A Bases YAML source could not be parsed reliably.':
+    '某 Bases YAML 来源无法可靠解析。',
+  'A Markdown or Canvas source executes a Bases code block.':
+    '某个 Markdown 或 Canvas 来源会执行 Bases 代码块。',
+  'A reference source could not be read.': '某个引用来源无法读取。',
+  'A reference source exceeds the processing limit.': '某个引用来源超过处理上限。',
+  'A reference source has unsaved changes.': '某个引用来源存在未保存的修改。',
+  'An open view of a reference source cannot be verified.': '某个已打开的引用来源视图无法核对。',
+  'This host cannot fully verify open Bases views.': '当前宿主无法完整核对已打开的 Bases 视图。',
+  'A fixed Bases image path does not resolve to one file.':
+    '某个固定的 Bases 图片路径无法唯一对应文件。',
+  'A reference target is ambiguous.': '某个引用目标存在歧义。',
+  'Obsidian resolves a reference source differently than this version.':
+    'Obsidian 对某个引用来源的解析与当前版本不一致。',
+  'A reference source could not be analyzed.': '某个引用来源无法分析。',
+  'Review the support scope. Rescanning does not make an unsupported format supported.':
+    '请查看支持范围。重新扫描不会让不支持的格式变为支持。',
+  'Open the source and review the listed field. This version does not evaluate dynamic expressions.':
+    '请打开来源并查看所列字段。当前版本不求值动态表达式。',
+  'Fix the YAML in the source, then scan again. The plugin does not rewrite source files.':
+    '请在来源中修复 YAML 后重新扫描；插件不会改写来源文件。',
+  'Open the source and review the executable block. This version does not analyze executable Bases blocks.':
+    '请打开来源并查看可执行代码块。当前版本不分析可执行的 Bases 代码块。',
+  'Restore read access, then scan again.': '请恢复可读状态后重新扫描。',
+  'No source is skipped to meet the limit. Review the source size and the support scope.':
+    '不会为满足上限而跳过任何来源。请检查来源大小与支持范围。',
+  'Save the source, then scan again.': '请保存来源后重新扫描。',
+  'Save and close the listed context, then scan again.': '请保存并关闭所列上下文后重新扫描。',
+  'Review the support scope. Closing windows or rescanning is not promised to fix this.':
+    '请查看支持范围。不承诺关闭窗口或重新扫描可以解决。',
+  'Open the source and correct the fixed path, then scan again.':
+    '请打开来源修正固定路径后重新扫描。',
+  'Make the target path explicit, then scan again.': '请明确目标路径后重新扫描。',
+  'Stop and review the source and target differences before continuing.':
+    '请停止并核对来源与目标差异后再继续。',
+  'Review the source and scan again. Do not treat this as zero references.':
+    '请检查来源后重新扫描，不要把此结果当作零引用。',
+  'Unsupported Bases field in {path}: {field}': '{path} 中的 Bases 字段不受支持：{field}',
+  'Dynamic Bases expression in {path}: {field}': '{path} 中的 Bases 表达式是动态的：{field}',
+  'Reference source is empty.': '引用来源为空。',
+  'Multiple YAML documents are not supported.': '不支持多个 YAML 文档。',
+  'YAML directives are not supported.': '不支持 YAML 指令。',
+  'YAML aliases are not supported.': '不支持 YAML 别名。',
+  'YAML anchors are not supported.': '不支持 YAML 锚点。',
+  'Explicit YAML tags are not supported.': '不支持显式 YAML 标签。',
+  'YAML merge keys are not supported.': '不支持 YAML 合并键。',
+  'Executable Bases code block in {path}.': '{path} 中包含可执行的 Bases 代码块。',
+  'Unresolved Bases image path in {path}: {reference}':
+    '{path} 中的 Bases 图片路径无法解析：{reference}',
+  'Participating image changed: {path}': '参与本次操作的图片已变化：{path}',
+  'Open Bases view must be saved and closed: {path}': '请先保存并关闭已打开的 Bases 视图：{path}',
+  'Save and close the note or Canvas that embeds this Bases source: {path}':
+    '请保存并关闭嵌入此 Bases 来源的笔记或 Canvas：{path}',
+  'This host cannot verify open Bases contexts: {path}': '当前宿主无法核对已打开的 Bases 上下文：{path}',
+  'Invalid review budget inputs.': '复核预算参数无效。',
+  'Base review budget is too large.': 'Bases 复核预算过大。',
+  'Base review budget exceeded. Reduce the selected images or rewritten documents.':
+    'Bases 复核预算超限，请减少所选图片或改写文档数量。',
+  'These references are read-only and cannot be rewritten. Retain the referenced image.':
+    '这些引用为只读，无法改写。请保留被引用的图片。',
+  'Open source: {path}': '打开来源：{path}',
   Previous: '上一页',
   Next: '下一页',
   Before: '修改前',

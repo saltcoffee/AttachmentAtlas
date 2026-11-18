@@ -4,6 +4,26 @@ Notable user-facing changes are recorded here. Version entries are used as relea
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-11-18
+
+### Added
+
+- Scan a restricted, verified subset of `.base` files instead of blocking cleanup for any `.base` presence: static table views and fixed `image("path")` formulas in a single YAML document.
+- Protect images referenced by a fixed `.base` formula as read-only targets. Retain them while clearing or merging unrelated copies, without rewriting `.base` files.
+- Show structured reference-coverage problems with the source, reason, impact, and an actionable next step, and explain when rescanning cannot fix an unsupported format.
+- Detect executable `base` code blocks in Markdown and Canvas sources and keep them as unsupported execution sources.
+
+### Changed
+
+- Replace the flat blocking list with typed coverage issues across scanning, planning, the preview worker protocol (version 3), execution checks, and the review UI.
+- Re-read every `.base` source at each deletion boundary, and watch participating image changes so a changed base or image stops further actions before a host deletion.
+- Keep every reference check and image check consistent from list selection through confirmation and execution.
+
+### Fixed
+
+- Keep cleanup available for libraries whose `.base` files use only the supported static subset while unknown keys, dynamic expressions, damaged YAML, aliases, anchors, tags, merge keys, and multi-document sources still block the whole vault.
+- Require an explicit save-and-close of an open Bases view before the source is treated as verified.
+
 ## [0.1.8] - 2026-11-06
 
 ### Changed

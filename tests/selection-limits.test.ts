@@ -69,7 +69,7 @@ describe('T16-07 / T16-08 explicit selection count boundaries', () => {
     });
     const originals = new Map(vault.files),
       result = await snapshot(vault);
-    expect(result.blockers).toEqual([]);
+    expect(result.coverageIssues).toEqual([]);
     expect(result.media).toHaveLength(120);
     expect(
       result.media.every(

@@ -239,7 +239,7 @@ export class OrganizerView extends ItemView {
 
   private renderTabs(parent: HTMLElement): void {
     const nav = parent.createDiv({ cls: 'atlas-tabs' }),
-      blockerLabel = this.plugin.snapshot?.blockers.length
+      blockerLabel = this.plugin.snapshot?.coverageIssues.length
         ? 'Potentially unreferenced'
         : 'Unreferenced';
     for (const [key, label] of [
@@ -261,19 +261,20 @@ export class OrganizerView extends ItemView {
   }
 
   private renderCoverage(parent: HTMLElement, snapshot: Snapshot): void {
+    const count = snapshot.coverageIssues.length;
     parent.createEl('p', {
-      text: snapshot.blockers.length
+      text: count
         ? t(
             'Incomplete reference coverage: {count} blockers. Merging and recycling are disabled.',
-            { count: snapshot.blockers.length },
+            { count },
           )
         : t(
             'Supported reference sources scanned. External apps and hidden configuration are outside coverage.',
           ),
-      cls: snapshot.blockers.length ? 'atlas-error' : 'atlas-muted',
-      attr: { role: snapshot.blockers.length ? 'alert' : 'status' },
+      cls: count ? 'atlas-error' : 'atlas-muted',
+      attr: { role: count ? 'alert' : 'status' },
     });
-    if (snapshot.blockers.length && this.state.tab !== 'blocked') {
+    if (count && this.state.tab !== 'blocked') {
       const review = parent.createEl('button', { text: t('View blocking issues') });
       review.dataset.focusKey = 'view-blocking-issues';
       review.dataset.focusFallback = 'tab:blocked';

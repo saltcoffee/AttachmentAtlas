@@ -17,8 +17,6 @@ export const diagnostics = {
   'Empty vault path.': '库内路径为空。',
   'Referenced by an Excalidraw drawing. Retain this image; drawing references are read-only.':
     '此图片被 Excalidraw 绘图引用，请保留此图片；绘图引用仅支持读取，不会自动改写。',
-  'Excalidraw references are read-only. Retain the referenced image.':
-    'Excalidraw 引用仅支持读取，请保留被引用的图片。',
   'Invalid Excalidraw decompression budget.': 'Excalidraw 解压大小限制无效。',
   'Invalid compressed Excalidraw data.': 'Excalidraw 压缩数据无效。',
   'Truncated compressed Excalidraw data.': 'Excalidraw 压缩数据不完整。',

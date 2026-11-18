@@ -287,7 +287,7 @@ export class OrganizerGroupCard {
         image.path === selection.keepPath ||
         !!image.reasons.length ||
         this.context.plugin.busy ||
-        !!this.context.plugin.snapshot?.blockers.length;
+        !!this.context.plugin.snapshot?.coverageIssues.length;
       row.retained.hidden = image.path !== selection.keepPath;
       return row.element;
     });

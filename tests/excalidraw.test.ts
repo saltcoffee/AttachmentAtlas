@@ -39,7 +39,7 @@ describe('read-only Excalidraw reference indexing', () => {
         'map.excalidraw.md': text,
       });
       const result = await snapshot(vault);
-      expect(result.blockers).toEqual([]);
+      expect(result.coverageIssues).toEqual([]);
       const used = result.media.find((image) => image.path === 'used.png')!;
       expect(used.references).toHaveLength(1);
       expect(used.references[0]?.readOnly).toBe(true);
@@ -61,7 +61,7 @@ describe('read-only Excalidraw reference indexing', () => {
     const text = drawing([{ id: 'text', type: 'text', text: 'A synthetic mind map' }]);
     const vault = new MemoryVault({ 'unused.png': PNG, 'map.excalidraw.md': text });
     const result = await snapshot(vault);
-    expect(result.blockers).toEqual([]);
+    expect(result.coverageIssues).toEqual([]);
     const plan = recyclePlan(result, ['unused.png']);
     await new OperationService(vault, digest).execute(plan, result);
     expect(vault.removed).toEqual(['unused.png']);
@@ -74,7 +74,7 @@ describe('read-only Excalidraw reference indexing', () => {
       const result = await snapshot(
         new MemoryVault({ 'used.png': PNG, 'map.excalidraw.md': text }),
       );
-      expect(result.blockers).toEqual([]);
+      expect(result.coverageIssues).toEqual([]);
       expect(result.media[0]?.references).toHaveLength(1);
     },
   );
@@ -90,7 +90,7 @@ describe('read-only Excalidraw reference indexing', () => {
     const result = await snapshot(
       new MemoryVault({ 'used.png': PNG, 'other.png': PNG, 'map.md': text }),
     );
-    expect(result.blockers).toEqual([]);
+    expect(result.coverageIssues).toEqual([]);
     expect(result.media.find((image) => image.path === 'used.png')?.references).toHaveLength(1);
     expect(result.media.find((image) => image.path === 'other.png')?.reasons).toContain(
       'Possible reference in unsupported syntax or plain text.',
@@ -117,7 +117,7 @@ describe('read-only Excalidraw reference indexing', () => {
     parsed.references.forEach((reference) => {
       reference.target = 'used.png';
     });
-    const source: Source = { ...parsed, path: 'map.excalidraw.md', text, digest: '' };
+    const source: Source = { ...parsed, path: 'map.excalidraw.md', text, digest: '', kind: 'excalidraw' };
     expect(() => rewrite(source, new Map([['used.png', 'other.png']]))).toThrow('read-only');
   });
   it.each([
@@ -135,7 +135,7 @@ describe('read-only Excalidraw reference indexing', () => {
     const result = await snapshot(
       new MemoryVault({ 'unused.png': PNG, 'map.excalidraw.md': text }),
     );
-    expect(result.blockers).not.toEqual([]);
+    expect(result.coverageIssues).not.toEqual([]);
     expect(() => recyclePlan(result, ['unused.png'])).toThrow('coverage');
   });
   it('rechecks drawings changed after preview before removing any image', async () => {

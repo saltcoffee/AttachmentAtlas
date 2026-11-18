@@ -117,7 +117,7 @@ export class OrganizerResults {
     image.reasons.forEach((reason) =>
       description.createEl('p', { text: problem(reason), cls: 'atlas-muted' }),
     );
-    if (!image.references.length && this.plugin.snapshot?.blockers.length)
+    if (!image.references.length && this.plugin.snapshot?.coverageIssues.length)
       description.createEl('p', {
         text: t('No references detected yet; reference coverage is incomplete.'),
         cls: 'atlas-muted',
@@ -181,7 +181,7 @@ export class OrganizerResults {
 
   private writeBlocker(snapshot: Snapshot): string {
     if (this.plugin.busy) return t('Wait for the running task to finish.');
-    if (snapshot.blockers.length)
+    if (snapshot.coverageIssues.length)
       return t('Open Needs review and resolve the blocking issues, then scan again.');
     return '';
   }

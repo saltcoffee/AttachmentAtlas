@@ -10,7 +10,7 @@ Find duplicate images, clean up unused images, and keep your Obsidian notes link
 
 Preview changes before applying them. Everything runs locally inside your vault, with no account, network requests, or telemetry.
 
-**Supported:** Obsidian desktop 1.8.7+; static PNG, JPEG, and WebP images. Interface: English and Simplified Chinese. Settings search integration is available on Obsidian 1.13.0+.
+**Supported:** Obsidian desktop 1.8.7+; static PNG, JPEG, and WebP images. Interface: English and Simplified Chinese. Settings search integration is available on Obsidian 1.13.0+. Bases `.base` files are scanned only through a restricted static subset (static table views and fixed `image("path")` formulas); dynamic formulas, executable `base` blocks, and unknown views keep merging and recycling disabled.
 
 ## Installation
 
@@ -39,7 +39,7 @@ To limit image scanning or protect folders, open **Settings → Attachment Atlas
 
 ## Recycling
 
-- **Reference coverage:** supported Markdown and Canvas references can be updated during merges. Excalidraw drawings are scanned without modification, and their images are protected. Incomplete reference checks block merging and recycling; inspect **Needs review**.
+- **Reference coverage:** supported Markdown and Canvas references can be updated during merges. Excalidraw drawings are scanned without modification, and their images are protected. Bases `.base` files are read through a restricted static subset: a fixed `image("path")` formula registers a read-only reference and its image is retained, while unrelated copies can still be merged or recycled. Frontmatter continues to act only as an existing protective hint. Dynamic formulas, executable `base` blocks, and unsupported views keep merging and recycling disabled; this version does not claim full Bases support, and rescanning does not make an unsupported format supported. Inspect **Needs review** for the source, reason, and next step.
 - **Deletion and restoration:** images follow **Settings → Files and links → Deleted files**: system trash, the vault’s `.trash/` folder, or permanent deletion. Choose a trash option if you want to restore images later; permanently deleted images cannot be recovered from trash. Reference changes made during a merge are not automatically undone.
 
 ## Support development

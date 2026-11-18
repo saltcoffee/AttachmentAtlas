@@ -1,4 +1,5 @@
 import { AtlasError, type Text } from './messages';
+import type { CoverageIssue, SourceKind } from './reference-coverage';
 export interface FileEntry {
   path: string;
   size: number;
@@ -27,19 +28,36 @@ interface ReferenceDetails {
   /** Syntax-decoded path; Markdown URI escapes are decoded only during resolution. */
   linkpath: string;
   target: string;
-  style: 'wiki' | 'markdown' | 'json';
+  style: 'wiki' | 'markdown' | 'json' | 'base-literal';
+  /** Source kind that owns this reference; must match the owning Source.kind. */
+  sourceKind: SourceKind;
 }
 export interface EditableReference extends ReferenceDetails {
   readOnly: false;
+  style: 'wiki' | 'markdown' | 'json';
   start: number;
   end: number;
   outer?: { start: number; end: number; text: string };
 }
-export type Reference = EditableReference | (ReferenceDetails & { readOnly: true });
+/** A `.base` fixed-path reference. Read-only, with the original YAML scalar range for display only. */
+export interface BaseReference extends ReferenceDetails {
+  readOnly: true;
+  style: 'base-literal';
+  start: number;
+  end: number;
+  fieldPath: string;
+}
+/** Any other read-only reference (for example Excalidraw embedded references). */
+export interface ReadOnlyReference extends ReferenceDetails {
+  readOnly: true;
+  style: 'wiki' | 'markdown' | 'json';
+}
+export type Reference = EditableReference | BaseReference | ReadOnlyReference;
 export interface Source {
   path: string;
   text: string;
   digest: string;
+  kind: SourceKind;
   references: Reference[];
   hints: string[];
 }
@@ -68,7 +86,7 @@ export interface Snapshot {
   files: FileEntry[];
   media: Media[];
   sources: Source[];
-  blockers: Text[];
+  coverageIssues: CoverageIssue[];
   duplicates: Media[][];
 }
 export interface DocumentChange {
@@ -98,16 +116,30 @@ export type Plan = PlanBase &
     | { readonly kind: 'merge-exact'; readonly groups: readonly MergeGroupPlan[] }
     | { readonly kind: 'recycle-unreferenced'; readonly retire: readonly ImageProof[] }
   );
+export interface VaultFileChange {
+  readonly kind: 'create' | 'modify' | 'delete' | 'rename';
+  readonly path: string;
+  readonly oldPath?: string;
+}
 export interface VaultPort {
   resolve?(reference: Reference): string | null;
   list(): FileEntry[];
   readText(path: string): Promise<string>;
-  /** Observe active reference-source changes, including unsaved editor content. */
+  /** Synchronously reject open or unverifiable Bases contexts without reading source files. */
+  assertBaseContextsClosed(paths: readonly string[]): void;
+  /** Verify current open source contents synchronously, including unsaved Canvas changes. */
+  assertSourceContents(expected: ReadonlyMap<string, string>): void;
+  /** Observe source/context changes, excluding the exact notifications from this port's process. */
   watchSourceChanges(onChange: (path: string) => void): () => void;
+  /** Observe create/modify/delete/rename events for the given participating paths. */
+  watchFileChanges(paths: readonly string[], onChange: (change: VaultFileChange) => void): () => void;
   readBinary(path: string): Promise<ArrayBuffer>;
   process(path: string, transform: (text: string) => string): Promise<void>;
-  /** Delete one active attachment according to Obsidian's deletion preference. */
-  remove(path: string): Promise<void>;
+  /**
+   * Delete one active attachment according to Obsidian's deletion preference. `beforeHostRemove`
+   * runs once, synchronously, immediately before the host deletion is started.
+   */
+  remove(path: string, beforeHostRemove: () => void): Promise<void>;
   exists(path: string): Promise<boolean>;
 }
 export type Hasher = (data: ArrayBuffer) => Promise<string>;
