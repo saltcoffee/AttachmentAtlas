@@ -1,19 +1,28 @@
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import { decodeString } from 'micromark-util-decode-string';
-import { assert, type EditableReference, type Reference } from '../domain/model';
+import { assert, type EditableReference } from '../domain/model';
+import { makeIssue, type CoverageIssue, type SourceKind } from '../domain/reference-coverage';
+import { message } from '../domain/messages';
 interface SyntaxNode {
   type: string;
   url?: string;
+  lang?: string | null;
   position?: { start: { offset?: number }; end: { offset?: number } };
   children?: SyntaxNode[];
 }
 interface Parsed {
   references: EditableReference[];
   hints: string[];
+  issues: CoverageIssue[];
 }
-export function parseMarkdown(text: string, source: string): Parsed {
+export function parseMarkdown(
+  text: string,
+  source: string,
+  sourceKind: SourceKind = 'markdown',
+): Parsed {
   const references: EditableReference[] = [],
-    hints: string[] = [];
+    hints: string[] = [],
+    issues: CoverageIssue[] = [];
   const excluded: [number, number][] = [];
   const wikiRanges: [number, number][] = [];
   let frontEnd = 0;
@@ -26,7 +35,7 @@ export function parseMarkdown(text: string, source: string): Parsed {
   const add = (
     start: number,
     end: number,
-    style: Reference['style'],
+    style: EditableReference['style'],
     destination = text.slice(start, end),
     autolink = false,
   ) => {
@@ -41,6 +50,7 @@ export function parseMarkdown(text: string, source: string): Parsed {
     if (pathEnd > start)
       references.push({
         source,
+        sourceKind,
         readOnly: false,
         start,
         end: pathEnd,
@@ -57,6 +67,16 @@ export function parseMarkdown(text: string, source: string): Parsed {
       if (['code', 'inlineCode', 'html'].includes(node.type)) {
         excluded.push([start, end]);
         hints.push(text.slice(start, end));
+        if (node.type === 'code' && node.lang?.trim().toLowerCase() === 'base')
+          issues.push(
+            makeIssue(
+              'unsupported-inline-base',
+              source,
+              sourceKind,
+              message('Executable Bases code block in {path}.', { path: source }),
+              { start, end },
+            ),
+          );
         return;
       }
       if (['link', 'image', 'definition'].includes(node.type)) {
@@ -99,7 +119,7 @@ export function parseMarkdown(text: string, source: string): Parsed {
   fragments.push(text.slice(cursor));
   const remainder = fragments.join(' ');
   hints.push(remainder.replace(/https?:\/\/[^\s)"']+/g, ''));
-  return { references, hints };
+  return { references, hints, issues };
 }
 function markdownPathEnd(raw: string, linkpath: string): number {
   // Decode complete escape/entity tokens before looking for a URL suffix: the '#'

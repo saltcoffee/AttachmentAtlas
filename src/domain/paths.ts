@@ -37,6 +37,9 @@ export function active(path: string): boolean {
 export function imagePath(path: string): boolean {
   return /\.(png|jpe?g|webp)$/i.test(path);
 }
+export function basePath(path: string): boolean {
+  return /\.base$/i.test(path);
+}
 export function sourcePath(path: string): boolean {
-  return /\.(md|canvas|excalidraw)$/i.test(path);
+  return /\.(md|canvas|excalidraw|base)$/i.test(path);
 }

@@ -7,6 +7,7 @@ import { matchesQuery, sortImages } from './organizer-query';
 import type { OrganizerResultContext } from './organizer-result-context';
 import { clampPage } from './organizer-state';
 import { reconcileElements } from './reconcile-elements';
+import { renderCoverageIssues } from './coverage-details';
 
 const IMAGE_PAGE_SIZE = 50;
 
@@ -21,9 +22,11 @@ export class OrganizerImageResults {
   render(parent: HTMLElement, snapshot: Snapshot): void {
     this.rows.clear();
     if (this.context.state.tab === 'blocked') {
-      if (snapshot.blockers.length)
-        snapshot.blockers.forEach((reason) =>
-          parent.createEl('p', { text: problem(reason), cls: 'atlas-error' }),
+      if (snapshot.coverageIssues.length)
+        renderCoverageIssues(
+          parent,
+          snapshot.coverageIssues,
+          (path) => void this.context.plugin.app.workspace.openLinkText(path, '', false),
         );
       else parent.createEl('p', { text: t('No reference blockers were found.') });
     }
@@ -39,7 +42,7 @@ export class OrganizerImageResults {
       if (this.context.state.tab === 'unreferenced') return !image.references.length;
       if (this.context.state.tab === 'blocked')
         return (
-          image.reasons.length > 0 || (!image.references.length && snapshot.blockers.length > 0)
+          image.reasons.length > 0 || (!image.references.length && snapshot.coverageIssues.length > 0)
         );
       return true;
     });
@@ -213,7 +216,7 @@ export class OrganizerImageResults {
       });
     checkbox.disabled =
       this.context.plugin.busy ||
-      !!this.context.plugin.snapshot?.blockers.length ||
+      !!this.context.plugin.snapshot?.coverageIssues.length ||
       !!unreferencedReasons(image, this.context.plugin.snapshot!).length;
     checkbox.onchange = () =>
       this.context.plugin.selection.setUnreferencedSelected([image.path], checkbox.checked);

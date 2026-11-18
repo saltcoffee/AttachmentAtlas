@@ -169,7 +169,7 @@ describe('performance measurement evidence', () => {
     ).toBe(60 * 1024 * 1024);
     expect(fixture.vault.list().some((file) => file.path === 'fixture-manifest.json')).toBe(false);
     const snapshot = await scan(fixture.vault, digest, { revision: 1, settings: DEFAULT_SETTINGS });
-    expect(snapshot.blockers).toEqual([]);
+    expect(snapshot.coverageIssues).toEqual([]);
     const selection = selectionForFixture(fixture, 'merge', 20);
     for (const group of selection.groups) {
       const keep = snapshot.media.find((image) => image.path === group.keepPath);

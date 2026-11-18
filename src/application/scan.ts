@@ -13,10 +13,29 @@ import {
 } from '../domain/model';
 import { active, imagePath, sourcePath, within } from '../domain/paths';
 import { imageFormat, imageDimensions } from '../domain/image';
-import { parseSource, createReferenceResolver } from '../references';
-import { AtlasError, asMessage, errorDetail, message, type Text } from '../domain/messages';
+import { parseSource, createReferenceResolver, sourceKindOf } from '../references';
+import {
+  AtlasError,
+  SourceStateError,
+  asMessage,
+  errorDetail,
+  message,
+  type Text,
+} from '../domain/messages';
+import {
+  coverageIssueReason,
+  makeIssue,
+  readOnlyReason,
+  type CoverageIssue,
+  type SourceKind,
+} from '../domain/reference-coverage';
 import { checkCancelled } from './cancellation';
 import { protectedImagePaths, type ReferenceIndexStats } from './reference-index';
+
+const BASE_SOURCE_LIMIT = 256 * 1024;
+const TOTAL_SOURCE_LIMIT = 64 * 1024 * 1024;
+const UTF8 = new TextEncoder();
+
 export interface ScanOptions {
   revision: number;
   settings: Settings;
@@ -24,6 +43,15 @@ export interface ScanOptions {
   progress?: (message: Text) => void;
   referenceIndexStats?: (stats: Readonly<ReferenceIndexStats>) => void;
 }
+
+function kindFromPath(path: string): SourceKind {
+  if (/\.base$/i.test(path)) return 'base';
+  if (/\.excalidraw$/i.test(path) || /\.canvas$/i.test(path)) {
+    return path.toLowerCase().endsWith('.canvas') ? 'canvas' : 'excalidraw';
+  }
+  return 'markdown';
+}
+
 export async function scan(
   vault: VaultPort,
   hash: Hasher,
@@ -36,13 +64,22 @@ export async function scan(
   const fileNames = files.map((file) => file.path),
     sources: Source[] = [],
     media: Media[] = [],
-    blockers: Text[] = [];
+    coverageIssues: CoverageIssue[] = [];
   let sourceBytes = 0;
   const check = () => {
-    if (options.signal?.aborted && blockers.length) throw new AtlasError(blockers[0]!);
+    if (options.signal?.aborted && coverageIssues.length) {
+      const issue = coverageIssues[0]!;
+      throw new AtlasError(issue.detail ?? coverageIssueReason(issue.code));
+    }
     checkCancelled(options.signal);
   };
   const resolve = createReferenceResolver(fileNames);
+  let baseContextError: unknown;
+  try {
+    vault.assertBaseContextsClosed(fileNames.filter((path) => /\.base$/i.test(path)));
+  } catch (error) {
+    baseContextError = error;
+  }
   for (const [index, file] of files.entries()) {
     check();
     options.progress?.(
@@ -52,48 +89,124 @@ export async function scan(
         path: file.path,
       }),
     );
-    if (/\.base$/i.test(file.path))
-      blockers.push(message('Unsupported reference container: {path}', { path: file.path }));
     if (!sourcePath(file.path)) continue;
-    try {
+    const kindGuess = kindFromPath(file.path);
+    const limit = /\.base$/i.test(file.path) ? BASE_SOURCE_LIMIT : MAX_SOURCE;
+    if (file.size > limit || sourceBytes + file.size > TOTAL_SOURCE_LIMIT) {
       sourceBytes += file.size;
-      assert(
-        file.size <= MAX_SOURCE && sourceBytes <= 64 * 1024 * 1024,
-        'Reference source budget exceeded.',
+      coverageIssues.push(
+        makeIssue('source-budget-exceeded', file.path, kindGuess, 'Reference source budget exceeded.'),
       );
-      const text = await vault.readText(file.path),
-        parsed = parseSource(file.path, text);
-      for (const reference of parsed.references) {
-        const result = resolve(reference);
-        reference.target = result.target;
-        if (result.ambiguous)
-          blockers.push(
+      continue;
+    }
+    sourceBytes += file.size;
+    let text: string;
+    try {
+      if (kindGuess === 'base' && baseContextError) throw baseContextError;
+      text = await vault.readText(file.path);
+    } catch (error) {
+      if (error instanceof SourceStateError)
+        coverageIssues.push(
+          makeIssue(error.code, file.path, kindGuess, error.detail),
+        );
+      else
+        coverageIssues.push(
+          makeIssue(
+            'source-read-failed',
+            file.path,
+            kindGuess,
+            message('{path}: {reason}', {
+              path: file.path,
+              reason: asMessage(errorDetail(error)),
+            }),
+          ),
+        );
+      continue;
+    }
+    // The listed metadata size can be stale; check the actual decoded UTF-8 bytes before parsing.
+    const actualBytes = UTF8.encode(text).byteLength;
+    sourceBytes += actualBytes - file.size;
+    if (actualBytes > limit || sourceBytes > TOTAL_SOURCE_LIMIT) {
+      coverageIssues.push(
+        makeIssue('source-budget-exceeded', file.path, kindGuess, 'Reference source budget exceeded.'),
+      );
+      continue;
+    }
+    const kind = sourceKindOf(file.path, text);
+    let parsed: { references: Source['references']; hints: string[]; issues: CoverageIssue[] };
+    try {
+      parsed = parseSource(file.path, text);
+    } catch (error) {
+      coverageIssues.push(
+        makeIssue(
+          'source-analysis-failed',
+          file.path,
+          kind,
+          message('{path}: {reason}', {
+            path: file.path,
+            reason: asMessage(errorDetail(error)),
+          }),
+        ),
+      );
+      continue;
+    }
+    for (const issue of parsed.issues) coverageIssues.push(issue);
+    for (const reference of parsed.references) {
+      const result = resolve(reference);
+      reference.target = result.target;
+      if (result.ambiguous)
+        coverageIssues.push(
+          makeIssue(
+            'ambiguous-target',
+            file.path,
+            reference.sourceKind,
             message('Ambiguous reference in {path}: {reference}', {
               path: file.path,
               reference: reference.raw,
             }),
-          );
-        if (
-          result.target &&
-          reference.style !== 'json' &&
-          vault.resolve &&
-          vault.resolve(reference) !== result.target
-        )
-          blockers.push(
+          ),
+        );
+      if (
+        result.target &&
+        reference.style !== 'json' &&
+        vault.resolve &&
+        vault.resolve(reference) !== result.target
+      )
+        coverageIssues.push(
+          makeIssue(
+            'host-resolution-mismatch',
+            file.path,
+            reference.sourceKind,
             message('Obsidian target resolution differs in {path}: {reference}', {
               path: file.path,
               reference: reference.raw,
             }),
+          ),
+        );
+      if (!result.target && !result.external) {
+        if (reference.style === 'base-literal')
+          coverageIssues.push(
+            makeIssue(
+              'unresolved-base-target',
+              file.path,
+              'base',
+              message('Unresolved Bases image path in {path}: {reference}', {
+                path: file.path,
+                reference: reference.raw,
+              }),
+            ),
           );
-        if (!result.target && !result.external)
-          parsed.hints.push(reference.raw, reference.linkpath);
+        else parsed.hints.push(reference.raw, reference.linkpath);
       }
-      sources.push({ path: file.path, text, digest: await digest(textBytes(text)), ...parsed });
-    } catch (error) {
-      blockers.push(
-        message('{path}: {reason}', { path: file.path, reason: asMessage(errorDetail(error)) }),
-      );
     }
+    sources.push({
+      path: file.path,
+      text,
+      digest: await digest(textBytes(text)),
+      kind,
+      references: parsed.references,
+      hints: parsed.hints,
+    });
   }
   const incoming = new Map<string, Source['references']>();
   const hints = sources.flatMap((source) => source.hints);
@@ -152,10 +265,8 @@ export async function scan(
     if (protectedPaths.has(file.path))
       reasons.push('Possible reference in unsupported syntax or plain text.');
     const references = incoming.get(file.path) ?? [];
-    if (references.some((reference) => reference.readOnly))
-      reasons.push(
-        'Referenced by an Excalidraw drawing. Retain this image; drawing references are read-only.',
-      );
+    const readOnlyKinds = [...new Set(references.filter((ref) => ref.readOnly).map((ref) => ref.sourceKind))].sort();
+    for (const kind of readOnlyKinds) reasons.push(readOnlyReason(kind));
     media.push({ ...file, ...dimensions, format, digest: fingerprint, reasons, references });
   }
   const groups = new Map<string, Media[]>();
@@ -192,13 +303,13 @@ export async function scan(
     files,
     media,
     sources,
-    blockers,
+    coverageIssues,
     duplicates,
   };
 }
 export function unreferencedReasons(image: Media, snapshot: Snapshot): Text[] {
   const reasons = [...image.reasons];
-  if (snapshot.blockers.length) reasons.push('Reference coverage is incomplete.');
+  if (snapshot.coverageIssues.length) reasons.push('Reference coverage is incomplete.');
   if (image.references.length) reasons.push('Image is referenced.');
   return reasons;
 }

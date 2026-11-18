@@ -125,7 +125,16 @@ export async function createFixture(sample) {
       entries.set(path, { path, size: Buffer.byteLength(text), mtime: 0 });
       metrics.writes++;
     },
-    async remove(path) {
+    watchSourceChanges() {
+    return () => {};
+  },
+  assertBaseContextsClosed() {},
+  assertSourceContents() {},
+  watchFileChanges() {
+    return () => {};
+  },
+  async remove(path, beforeHostRemove = () => {}) {
+      beforeHostRemove();
       const destination = join(root, '.trash', path);
       await mkdir(dirname(destination), { recursive: true });
       await rename(join(root, path), destination);

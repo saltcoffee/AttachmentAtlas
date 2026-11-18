@@ -249,7 +249,12 @@ describe('preview session boundaries', () => {
       expect(ui.root.ownerDocument.activeElement?.dataset.focusKey).toBe(key);
       expect(ui.root.ownerDocument.activeElement?.attrs['aria-pressed']).toBe('true');
     }
-    ui.plugin.snapshot!.blockers.push('Reference coverage is incomplete.');
+    ui.plugin.snapshot!.coverageIssues.push({
+      code: 'source-analysis-failed',
+      source: 'note.md',
+      sourceKind: 'markdown',
+      detail: 'Reference coverage is incomplete.',
+    });
     ui.root
       .all()
       .find((element) => element.dataset.focusKey === 'tab:duplicates')!

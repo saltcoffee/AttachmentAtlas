@@ -6,12 +6,14 @@ import {
   type Source,
   type SourcePatch,
 } from '../domain/model';
+import type { CoverageIssue, SourceKind } from '../domain/reference-coverage';
 import { basename, dirname, vaultPath } from '../domain/paths';
 import { parseCanvas } from './canvas';
 import { parseMarkdown } from './markdown';
 import { message } from '../domain/messages';
 import { externalLink } from './urls';
 import { excalidrawSource, parseExcalidraw } from './excalidraw';
+import { analyzeBase } from './base';
 export function resolveReference(
   reference: Reference,
   files: string[],
@@ -39,7 +41,7 @@ export function createReferenceResolver(files: readonly string[]) {
     if (/^[a-z][\w+.-]*:/i.test(raw)) return { target: '', ambiguous: true, external: false };
     try {
       const candidates = new Set<string>();
-      if (reference.style === 'json') {
+      if (reference.style === 'json' || reference.style === 'base-literal') {
         const exact = vaultPath(raw);
         if (paths.has(exact)) candidates.add(exact);
       } else if (!raw.includes('/') && reference.style === 'wiki') {
@@ -65,11 +67,17 @@ export function createReferenceResolver(files: readonly string[]) {
     }
   };
 }
+export function sourceKindOf(path: string, text: string): SourceKind {
+  if (/\.base$/i.test(path)) return 'base';
+  if (excalidrawSource(path, text)) return 'excalidraw';
+  return path.toLowerCase().endsWith('.canvas') ? 'canvas' : 'markdown';
+}
 export function parseSource(
   path: string,
   text: string,
-): { references: Reference[]; hints: string[] } {
+): { references: Reference[]; hints: string[]; issues: CoverageIssue[] } {
   assert(!text.startsWith('\uFEFF'), 'BOM-encoded sources require manual review.');
+  if (/\.base$/i.test(path)) return analyzeBase(text, path);
   if (excalidrawSource(path, text)) return parseExcalidraw(text, path);
   return path.toLowerCase().endsWith('.canvas')
     ? parseCanvas(text, path)
@@ -123,7 +131,10 @@ export function rewrite(source: Source, replacements: Map<string, string>): Rewr
   for (const ref of source.references) {
     const target = replacements.get(ref.target);
     if (!target || target === ref.target) continue;
-    assert(!ref.readOnly, 'Excalidraw references are read-only. Retain the referenced image.');
+    assert(
+      !ref.readOnly,
+      'These references are read-only and cannot be rewritten. Retain the referenced image.',
+    );
     const patch = { start: ref.start, end: ref.end, value: targetText(ref, target) };
     if (ref.outer) {
       const group = nested.get(ref.outer.start) ?? { outer: ref.outer, patches: [] };

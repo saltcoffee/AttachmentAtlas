@@ -19,7 +19,7 @@ describe('referenced-image recycling safety', () => {
     const vault = new MemoryVault({ [path]: PNG, 'keep.png': PNG, [source]: text });
     const result = await snapshot(vault);
     const image = result.media.find((media) => media.path === path)!;
-    expect(result.blockers).toEqual([]);
+    expect(result.coverageIssues).toEqual([]);
     expect(image.reasons).toEqual([]);
     expect(image.references).toHaveLength(1);
     expect(() => recyclePlan(result, [path])).toThrow('Image is referenced');

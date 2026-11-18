@@ -7,6 +7,8 @@ import {
   type Snapshot,
 } from '../domain/model';
 import {
+  assertBaseReviewBudget,
+  baseReviewBudget,
   checkedByteTotal,
   MAX_MERGE_RETIRE_BYTES,
   MAX_RETIRE_COUNT,
@@ -40,7 +42,7 @@ function proof(image: Media): ImageProof {
 }
 
 export function buildPlan(snapshot: Snapshot, request: SelectionRequest): Plan {
-  assert(!snapshot.blockers.length, 'Reference coverage is incomplete.');
+  assert(!snapshot.coverageIssues.length, 'Reference coverage is incomplete.');
   const media = new Map(snapshot.media.map((image) => [image.path, image]));
   const find = (path: string) => {
     assert(vaultPath(path) === path, 'Non-canonical vault path.');
@@ -132,7 +134,10 @@ export function buildPlan(snapshot: Snapshot, request: SelectionRequest): Plan {
       'Selected duplicate copies exceed 192 MiB.',
     );
   // Unreferenced images have no targets to rewrite or resolve again.
-  if (plan.kind === 'recycle-unreferenced') return plan;
+  if (plan.kind === 'recycle-unreferenced') {
+    assertBaseReviewBudget(baseReviewBudget(snapshot.sources, 0, retire.length));
+    return plan;
+  }
   const replacements = replacementTargets(plan);
   const updated = snapshot.sources.map((source) => ({
     source,
@@ -163,6 +168,7 @@ export function buildPlan(snapshot: Snapshot, request: SelectionRequest): Plan {
     snapshot.files.filter((file) => !paths.has(file.path)).map((file) => file.path),
     replacements,
   );
+  assertBaseReviewBudget(baseReviewBudget(snapshot.sources, documents.length, retire.length));
   return { ...plan, documents };
 }
 

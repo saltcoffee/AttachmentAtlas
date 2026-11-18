@@ -217,8 +217,12 @@ describe('message boundaries and catalogue coverage', () => {
       settings: DEFAULT_SETTINGS,
       progress: (text) => progress.push(text),
     });
-    expect(translate('zh', result.blockers[0]!)).toBe('不支持的引用容器：view.base');
-    expect(translate('de', result.blockers[0]!)).toBe('Unsupported reference container: view.base');
+    expect(translate('zh', result.coverageIssues[0]!.detail!)).toBe(
+      'view.base：引用来源为空。',
+    );
+    expect(translate('de', result.coverageIssues[0]!.detail!)).toBe(
+      'view.base: Reference source is empty.',
+    );
     expect(progress.map((text) => translate('zh', text)).join('\n')).toContain('正在检查');
     expect(progress.map((text) => translate('zh', text)).join('\n')).toContain(
       'Image is referenced..png',

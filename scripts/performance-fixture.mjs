@@ -140,12 +140,11 @@ async function populateFixture(sample, directory, signal) {
     inventoryHash.update(JSON.stringify([path, digest]) + '\n');
     await add(path, text);
   }
-  const notify = (path) => {
-    if (/\.(md|canvas|excalidraw)$/i.test(path)) for (const listener of listeners) listener(path);
-  };
   const vault = {
     list: () => [...entries.values()].map((file) => ({ ...file })),
     readText: (path) => readFile(join(root, path), 'utf8'),
+    assertBaseContextsClosed() {},
+    assertSourceContents() {},
     async readBinary(path) {
       const data = await readFile(join(root, path));
       return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
@@ -154,15 +153,18 @@ async function populateFixture(sample, directory, signal) {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
+    watchFileChanges() {
+      return () => {};
+    },
     async process(path, transform) {
       assert(originals.has(path), 'Only fixture sources may be rewritten.');
       const text = transform(await this.readText(path));
       await writeFile(join(root, path), text);
       entries.set(path, { path, size: Buffer.byteLength(text), mtime: 0 });
       changed.add(path);
-      notify(path);
     },
-    async remove(path) {
+    async remove(path, beforeHostRemove = () => {}) {
+      beforeHostRemove();
       assert(imageDigests.has(path), 'Only fixture images may be moved.');
       const destination = join(root, '.trash', path);
       await mkdir(dirname(destination), { recursive: true });

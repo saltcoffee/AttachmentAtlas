@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseSource, resolveReference, rewrite, verifyTargets } from '../src/references';
+import { parseSource, resolveReference, rewrite, verifyTargets, sourceKindOf } from '../src/references';
 import { digest, textBytes, type Source } from '../src/domain/model';
 import { vaultPath } from '../src/domain/paths';
 async function replace(text: string, path = 'note.md'): Promise<string> {
@@ -7,7 +7,7 @@ async function replace(text: string, path = 'note.md'): Promise<string> {
   parsed.references.forEach((reference) => {
     reference.target = 'old.png';
   });
-  const source: Source = { ...parsed, path, text, digest: await digest(textBytes(text)) };
+  const source: Source = { ...parsed, path, text, digest: await digest(textBytes(text)), kind: sourceKindOf(path, text) };
   return rewrite(source, new Map([['old.png', 'assets/new image.png']])).text;
 }
 describe('source-aware reference rewriting', () => {
@@ -81,7 +81,7 @@ describe('source-aware reference rewriting', () => {
     parsed.references.forEach((ref) => {
       ref.target = resolveReference(ref, files).target;
     });
-    const source: Source = { ...parsed, path, text, digest: '' };
+    const source: Source = { ...parsed, path, text, digest: '', kind: sourceKindOf(path, text) };
     const replacements = new Map([['old.png', 'assets/new image.png']]);
     const after = rewrite(source, replacements).text;
     expect(parsed.references).toHaveLength(2);
@@ -217,7 +217,7 @@ describe('path resolution', () => {
     const parsed = parseSource('map.canvas', text);
     for (const ref of parsed.references)
       ref.target = resolveReference(ref, ['old.png', 'new.png']).target;
-    const source: Source = { ...parsed, path: 'map.canvas', text, digest: '' };
+    const source: Source = { ...parsed, path: 'map.canvas', text, digest: '', kind: 'canvas' };
     const replacements = new Map([['old.png', 'new.png']]);
     const after = rewrite(source, replacements).text;
     expect(after).toContain('weread://bestbookmark?id=123');

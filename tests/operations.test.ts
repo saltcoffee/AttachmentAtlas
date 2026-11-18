@@ -51,7 +51,7 @@ describe('scan and plans', () => {
       'note.md': 'cover: unused.png',
     });
     const result = await snapshot(vault);
-    expect(result.blockers).toHaveLength(1);
+    expect(result.coverageIssues).toHaveLength(1);
     expect(result.media[0]?.reasons).not.toHaveLength(0);
     expect(() => recyclePlan(result, ['unused.png'])).toThrow();
   });
@@ -189,7 +189,7 @@ describe('execution with native trash', () => {
   it('stops on a late source and keeps all originals', async () => {
     const { vault, service, plan, result } = await setup();
     vault.onProcess = () => vault.files.set('new.md', textBytes('![[b.png]]'));
-    await expectStopped(service.execute(plan, result), 'Active vault files changed');
+    await expectStopped(service.execute(plan, result), 'Document changed');
     expect(vault.removed).toEqual([]);
     expect(await vault.readText('new.md')).toBe('![[b.png]]');
   });

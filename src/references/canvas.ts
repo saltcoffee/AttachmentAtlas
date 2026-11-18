@@ -5,11 +5,13 @@ import {
   type Node as JsonNode,
 } from 'jsonc-parser';
 import { assert, type Reference } from '../domain/model';
+import type { CoverageIssue } from '../domain/reference-coverage';
 import { parseMarkdown } from './markdown';
 export function parseCanvas(
   text: string,
   source: string,
-): { references: Reference[]; hints: string[] } {
+): { references: Reference[]; hints: string[]; issues: CoverageIssue[] } {
+  const issues: CoverageIssue[] = [];
   const errors: ParseError[] = [];
   const tree = parseTree(text, errors, { disallowComments: true, allowTrailingComma: false });
   assert(tree?.type === 'object' && !errors.length, 'Invalid Canvas JSON.');
@@ -62,13 +64,16 @@ export function parseCanvas(
     );
     handled.add(value.offset);
     if (field === 'text') {
-      const parsed = parseMarkdown(value.value, source);
+      const parsed = parseMarkdown(value.value, source, 'canvas');
       const outer = { start: value.offset, end: value.offset + value.length, text: value.value };
       references.push(...parsed.references.map((reference) => ({ ...reference, outer })));
       hints.push(...parsed.hints);
+      // Decoded text offsets do not map to the outer JSON; keep the issue without fake positions.
+      for (const issue of parsed.issues) issues.push({ ...issue, location: undefined });
     } else
       references.push({
         source,
+        sourceKind: 'canvas',
         readOnly: false,
         start: value.offset,
         end: value.offset + value.length,
@@ -84,5 +89,5 @@ export function parseCanvas(
     node.children?.forEach(collectUnknownStrings);
   };
   collectUnknownStrings(tree);
-  return { references, hints };
+  return { references, hints, issues };
 }

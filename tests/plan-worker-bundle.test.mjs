@@ -31,7 +31,7 @@ describe('packaged preview worker', () => {
         worker.once('message', settle(resolve));
         worker.once('error', settle(reject));
         worker.postMessage({
-          version: 2,
+          version: 3,
           id: 1,
           snapshot: result,
           selection: {
@@ -46,7 +46,7 @@ describe('packaged preview worker', () => {
           },
         });
       });
-      expect(response).toEqual({ version: 2, id: 1, ok: true, plan });
+      expect(response).toEqual({ version: 3, id: 1, ok: true, plan });
       expect(plan.documents[0].after).toBe('![中文😀](/keep.png)');
       expect(Object.keys(bundled.metafile.inputs)).not.toContain(
         'node_modules/decode-named-character-reference/index.dom.js',

@@ -7,8 +7,9 @@ import {
   type VaultPort,
 } from '../domain/model';
 import { retiringImages, retainedImages } from '../domain/operation-plan';
+import { assertBaseReviewBudget, baseReviewBudget } from '../domain/operation-limits';
 import { scan } from './scan';
-import { AtlasError, asMessage, errorDetail, message, type Text } from '../domain/messages';
+import { asMessage, errorDetail, message, type Text } from '../domain/messages';
 import { OperationCancelled, checkCancelled, yieldToHost } from './cancellation';
 import { validatePlan } from './plan';
 import { ExecutionRecorder, type ExecutionResult } from './execution-result';
@@ -56,6 +57,12 @@ export class OperationService {
       checkCancelled(signal);
       assert(snapshot.revision === plan.revision, 'Scan changed. Preview a new plan.');
       validatePlan(snapshot, plan);
+      const reviewBudget = baseReviewBudget(
+        snapshot.sources,
+        plan.documents.length,
+        retiringImages(plan).length,
+      );
+      assertBaseReviewBudget(reviewBudget);
       record.stage = 'preflight';
       if (plan.kind === 'merge-exact') {
         report('Rechecking all images and reference sources.');
@@ -65,7 +72,7 @@ export class OperationService {
           signal,
           progress: report,
         });
-        assert(!fresh.blockers.length, 'Reference coverage changed.');
+        assert(!fresh.coverageIssues.length, 'Reference coverage changed.');
         const baselines = new Map(plan.baseline.map((source) => [source.path, source.digest]));
         assert(
           fresh.sources.length === baselines.size &&
@@ -97,7 +104,7 @@ export class OperationService {
           );
         }
       }
-      verifier = new ExecutionVerifier(this.vault, plan, snapshot);
+      verifier = new ExecutionVerifier(this.vault, plan, snapshot, reviewBudget);
       record.stage = 'prove-groups';
       if (plan.kind === 'merge-exact')
         for (const group of plan.groups) {
@@ -136,6 +143,8 @@ export class OperationService {
         report(message('Updating references: {path}', { path: doc.path }));
         record.documents.set(doc.path, 'unconfirmed');
         await this.vault.process(doc.path, (text) => {
+          // Check the execution proof synchronously inside the transform, before the write.
+          verifier!.assertParticipantProof();
           assert(text === doc.before, message('Document changed: {path}', { path: doc.path }));
           return doc.after;
         });
@@ -144,6 +153,7 @@ export class OperationService {
           (await this.vault.readText(doc.path)) === doc.after,
           'Document write verification failed.',
         );
+        verifier.confirmRewrite(doc.path);
         record.documents.set(doc.path, 'verified');
         completed.add(doc.path);
         report(message('File verified: {path}', { path: doc.path }));
@@ -157,17 +167,20 @@ export class OperationService {
         record.path = image.path;
         checkCancelled(signal);
         if (plan.kind === 'recycle-unreferenced') report('Checking reference sources.');
-        await verifier.verify(completed, removed, signal, true);
         const data = await this.vault.readBinary(image.path);
         assert(
           data.byteLength === image.size && (await digest(data)) === image.digest,
           'Image changed immediately before recycling.',
         );
+        await verifier.verify(completed, removed, signal, true);
         report(message('Recycling image: {path}', { path: image.path }));
         if (plan.kind === 'recycle-unreferenced') verifier.assertUnchanged(removed);
         checkCancelled(signal);
-        record.images.set(image.path, 'unconfirmed');
-        await this.vault.remove(image.path);
+        await this.vault.remove(image.path, () => {
+          verifier!.beforeHostRemove(image.path);
+          record.images.set(image.path, 'unconfirmed');
+        });
+        verifier.clearExpectedRemoval();
         assert(!(await this.vault.exists(image.path)), 'Image still exists after recycling.');
         record.images.set(image.path, 'verified');
         removed.add(image.path);
@@ -184,17 +197,10 @@ export class OperationService {
       const cancelled = error instanceof OperationCancelled;
       if (record.stage === 'final-verify' && record.finalVerification !== 'passed')
         record.finalVerification = cancelled ? 'cancelled' : 'failed';
-      if (
-        error instanceof AtlasError &&
-        typeof error.detail !== 'string' &&
-        typeof error.detail.values.path === 'string'
-      )
-        record.path = error.detail.values.path;
-      return record.finish(
-        cancelled ? 'cancelled' : 'failed',
-        !!signal?.aborted,
-        errorDetail(error),
-      );
+      const detail = errorDetail(error);
+      if (typeof detail !== 'string' && typeof detail.values.path === 'string')
+        record.path = detail.values.path;
+      return record.finish(cancelled ? 'cancelled' : 'failed', !!signal?.aborted, detail);
     } finally {
       this.running = false;
       verifier?.dispose();

@@ -30,8 +30,22 @@ export class AtlasError extends Error {
     this.name = 'AtlasError';
   }
 }
+export type SourceStateCode =
+  | 'unsaved-source'
+  | 'source-state-unverifiable'
+  | 'base-state-capability-unsupported';
+/** A typed adapter failure that scan maps to a specific coverage issue code. */
+export class SourceStateError extends Error {
+  constructor(
+    readonly code: SourceStateCode,
+    readonly detail: Text,
+  ) {
+    super(renderMessage(detail));
+    this.name = 'SourceStateError';
+  }
+}
 export function errorDetail(error: unknown): Text {
-  return error instanceof AtlasError
+  return error instanceof AtlasError || error instanceof SourceStateError
     ? error.detail
     : error instanceof Error
       ? error.message

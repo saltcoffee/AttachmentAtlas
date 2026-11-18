@@ -1,5 +1,6 @@
 import { parseTree, type Node as JsonNode, type ParseError } from 'jsonc-parser';
 import { assert, type Reference } from '../domain/model';
+import type { CoverageIssue } from '../domain/reference-coverage';
 import { parseMarkdown } from './markdown';
 import { decompressScene } from './excalidraw-compression';
 import { externalLink } from './urls';
@@ -17,20 +18,23 @@ export function excalidrawSource(path: string, text: string): boolean {
 export function parseExcalidraw(
   text: string,
   source: string,
-): { references: Reference[]; hints: string[] } {
+): { references: Reference[]; hints: string[]; issues: CoverageIssue[] } {
   const references: Reference[] = [],
-    hints: string[] = [];
+    hints: string[] = [],
+    issues: CoverageIssue[] = [];
   const registered = new Set<string>();
   const seen = new Set<string>();
   const collectMarkdown = (value: string) => {
-    const parsed = parseMarkdown(value, source);
+    const parsed = parseMarkdown(value, source, 'excalidraw');
     hints.push(...parsed.hints);
+    for (const issue of parsed.issues) issues.push({ ...issue, location: undefined });
     for (const ref of parsed.references) {
       const key = `${ref.style}:${ref.linkpath}`;
       if (seen.has(key)) continue;
       seen.add(key);
       references.push({
         source,
+        sourceKind: 'excalidraw',
         raw: ref.raw,
         linkpath: ref.linkpath,
         target: '',
@@ -127,6 +131,7 @@ export function parseExcalidraw(
         if (linkpath)
           references.push({
             source,
+            sourceKind: 'excalidraw',
             raw: linkpath,
             linkpath,
             target: '',
@@ -136,5 +141,5 @@ export function parseExcalidraw(
       }
     }
   }
-  return { references, hints };
+  return { references, hints, issues };
 }

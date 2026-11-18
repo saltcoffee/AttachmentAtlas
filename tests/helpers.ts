@@ -1,5 +1,6 @@
 import {
   type FileEntry,
+  type VaultFileChange,
   type VaultPort,
   digest,
   textBytes,
@@ -18,6 +19,8 @@ export const PNG = Uint8Array.from(
 ).buffer;
 export class MemoryVault implements VaultPort {
   private sourceListeners = new Set<(path: string) => void>();
+  private fileListeners = new Set<(change: VaultFileChange) => void>();
+  private writingSource = '';
   files = new Map<string, ArrayBuffer>();
   removed: string[] = [];
   onProcess?: (path: string) => void;
@@ -28,23 +31,47 @@ export class MemoryVault implements VaultPort {
     const set = this.files.set.bind(this.files),
       remove = this.files.delete.bind(this.files);
     this.files.set = (path, data) => {
+      const existed = this.files.has(path);
       set(path, data);
+      this.emitFileChange({ kind: existed ? 'modify' : 'create', path });
       this.sourceChanged(path);
       return this.files;
     };
     this.files.delete = (path) => {
       const deleted = remove(path);
-      if (deleted) this.sourceChanged(path);
+      if (deleted) {
+        this.emitFileChange({ kind: 'delete', path });
+        this.sourceChanged(path);
+      }
       return deleted;
     };
   }
   private sourceChanged(path: string): void {
+    if (path === this.writingSource) return;
     if (active(path) && sourcePath(path))
       for (const listener of this.sourceListeners) listener(path);
+  }
+  private emitFileChange(change: VaultFileChange): void {
+    for (const listener of this.fileListeners) listener(change);
   }
   watchSourceChanges(onChange: (path: string) => void): () => void {
     this.sourceListeners.add(onChange);
     return () => this.sourceListeners.delete(onChange);
+  }
+  watchFileChanges(
+    paths: readonly string[],
+    onChange: (change: VaultFileChange) => void,
+  ): () => void {
+    const watched = new Set(paths);
+    const listener = (change: VaultFileChange) => {
+      const related =
+        watched.has(change.path) ||
+        (change.oldPath !== undefined && watched.has(change.oldPath)) ||
+        [...watched].some((path) => path.startsWith(`${change.path}/`));
+      if (related) onChange(change);
+    };
+    this.fileListeners.add(listener);
+    return () => this.fileListeners.delete(listener);
   }
   list(): FileEntry[] {
     return [...this.files].map(([path, data]) => ({
@@ -56,6 +83,8 @@ export class MemoryVault implements VaultPort {
   async readText(path: string): Promise<string> {
     return new TextDecoder().decode(await this.readBinary(path));
   }
+  assertBaseContextsClosed(_paths: readonly string[]): void {}
+  assertSourceContents(_expected: ReadonlyMap<string, string>): void {}
   async readBinary(path: string): Promise<ArrayBuffer> {
     const data = this.files.get(path);
     if (!data) throw new Error(`Not found: ${path}`);
@@ -63,9 +92,16 @@ export class MemoryVault implements VaultPort {
   }
   async process(path: string, transform: (text: string) => string): Promise<void> {
     this.onProcess?.(path);
-    this.files.set(path, textBytes(transform(await this.readText(path))));
+    const text = transform(await this.readText(path));
+    this.writingSource = path;
+    try {
+      this.files.set(path, textBytes(text));
+    } finally {
+      this.writingSource = '';
+    }
   }
-  async remove(path: string): Promise<void> {
+  async remove(path: string, beforeHostRemove?: () => void): Promise<void> {
+    beforeHostRemove?.();
     this.onRemove?.(path);
     if (!this.files.delete(path)) throw new Error('File missing.');
     this.removed.push(path);

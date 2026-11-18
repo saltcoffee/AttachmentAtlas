@@ -199,7 +199,7 @@ describe('protective reference index', () => {
     expect(statistics).toMatchObject([{ mode: 'indexed', fallbackReason: null }]);
     const hints = result.sources.flatMap((source) => source.hints);
     const protectedPaths = original(paths, hints);
-    expect(result.blockers).toEqual([]);
+    expect(result.coverageIssues).toEqual([]);
     expect(
       new Set(
         result.media

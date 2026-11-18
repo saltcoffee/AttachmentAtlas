@@ -413,7 +413,7 @@ describe('localized plugin surfaces', () => {
       .all()
       .find((node) => node.text === '查看阻塞问题')
       ?.onclick?.();
-    expect(root.contents()).toContain('不支持的引用容器：map.base');
+    expect(root.contents()).toContain('map.base 中的 Bases 字段不受支持：filters');
   });
   it('retains the drawing-used copy by default and explains a different blocked choice', async () => {
     host.language = 'zh';
