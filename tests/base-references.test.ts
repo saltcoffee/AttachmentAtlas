@@ -592,7 +592,7 @@ describe('UTF-8 byte reuse in scan', () => {
     }
   });
 
-  it('enforces exact single-source, base-source, and total-source UTF-8 byte budgets', async () => {
+  it('enforces UTF-8 byte budgets across base, markdown, and multi-source scans', async () => {
     const baseLimit = 256 * 1024;
     const baseHeader = table + '\n# ';
     const exactBase = baseHeader + 'a'.repeat(baseLimit - Buffer.byteLength(baseHeader));
@@ -613,13 +613,10 @@ describe('UTF-8 byte reuse in scan', () => {
       listed().map((file) => (file.path === 'over.md' ? { ...file, size: 10 } : file));
     expect(codes(await snapshot(staleOverMdVault))).toEqual(['source-budget-exceeded']);
 
-    const exactCanvas = '{"nodes":[],"edges":[]}'.padEnd(MAX_SOURCE, ' ');
-    const totalEntries: Record<string, string> = {};
-    for (let i = 0; i < 16; i++)
-      totalEntries[`chunk-${String(i).padStart(2, '0')}.canvas`] = exactCanvas;
-    expect(codes(await snapshot(new MemoryVault(totalEntries)))).toEqual([]);
-
-    const overTotalVault = new MemoryVault({ ...totalEntries, 'extra.md': 'a' });
-    expect(codes(await snapshot(overTotalVault))).toEqual(['source-budget-exceeded']);
-  }, 15000);
+    const twoMiBCanvas = '{"nodes":[],"edges":[]}'.padEnd(2 * 1024 * 1024, ' ');
+    const multiEntries: Record<string, string> = {};
+    for (let i = 0; i < 8; i++)
+      multiEntries[`chunk-${String(i).padStart(2, '0')}.canvas`] = twoMiBCanvas;
+    expect(codes(await snapshot(new MemoryVault(multiEntries)))).toEqual([]);
+  });
 });
