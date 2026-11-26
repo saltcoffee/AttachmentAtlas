@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { digest, textBytes, type Source } from '../src/domain/model';
+import { DEFAULT_SETTINGS, MAX_SOURCE, digest, textBytes, type Source } from '../src/domain/model';
 import { parseSource } from '../src/references';
 import { matchAnyFilter, matchStaticImage } from '../src/references/base-expression';
-import { unreferencedReasons } from '../src/application/scan';
+import { scan, unreferencedReasons } from '../src/application/scan';
 import { buildPlan } from '../src/application/plan';
 import { OperationService } from '../src/application/execute';
 import { ExecutionVerifier } from '../src/application/execute-validation';
-import { renderMessage } from '../src/domain/messages';
+import { SourceStateError, renderMessage } from '../src/domain/messages';
 import { MemoryVault, PNG, mergePlan, recyclePlan, snapshot } from './helpers';
 
 const table = `views:
@@ -427,4 +427,199 @@ describe('base review budget and actual source size', () => {
     const result = await snapshot(vault);
     expect(codes(result)).toContain('source-budget-exceeded');
   });
+});
+
+describe('Bases context exception handling', () => {
+  it('preserves SourceStateError codes and details across multiple base files without reading them', async () => {
+    const vault = new MemoryVault({
+      'a.base': table,
+      'b.base': table,
+      'note.md': '![[ref.png]]',
+      'ref.png': PNG,
+      'copy.png': PNG,
+      'unused.png': PNG,
+    });
+    const readText = vi.spyOn(vault, 'readText');
+    vault.assertBaseContextsClosed = () => {
+      throw new SourceStateError('unsaved-source', 'Save and close Bases views before scanning.');
+    };
+    const result = await snapshot(vault);
+    const baseIssues = result.coverageIssues.filter((issue) => issue.sourceKind === 'base');
+    expect(baseIssues).toHaveLength(2);
+    expect(baseIssues.map((issue) => [issue.source, issue.code])).toEqual([
+      ['a.base', 'unsaved-source'],
+      ['b.base', 'unsaved-source'],
+    ]);
+    expect(renderMessage(baseIssues[0]!.detail!)).toBe(
+      'Save and close Bases views before scanning.',
+    );
+    expect(readText).not.toHaveBeenCalledWith('a.base');
+    expect(readText).not.toHaveBeenCalledWith('b.base');
+    expect(result.sources.map((source) => source.path)).toEqual(['note.md']);
+    expect(result.sources[0]!.references[0]?.target).toBe('ref.png');
+    expect(() => recyclePlan(result, ['unused.png'])).toThrow('Reference coverage is incomplete.');
+    expect(() => mergePlan(result, ['copy.png'], 'ref.png')).toThrow(
+      'Reference coverage is incomplete.',
+    );
+  });
+
+  it.each<[string, unknown, string]>([
+    ['plain Error', new Error('Host context check failed'), 'Host context check failed'],
+    ['string', 'host failure', 'host failure'],
+    ['empty string', '', ''],
+    ['undefined', undefined, 'undefined'],
+    ['zero', 0, '0'],
+    ['false', false, 'false'],
+  ])('normalizes thrown %s into source-read-failed per base source', async (_label, thrown, expectedReason) => {
+    const vault = new MemoryVault({
+      'a.base': table,
+      'b.base': table,
+      'note.md': 'Plain note.',
+      'unused.png': PNG,
+    });
+    const readText = vi.spyOn(vault, 'readText');
+    vault.assertBaseContextsClosed = () => {
+      throw thrown;
+    };
+    const result = await snapshot(vault);
+    const baseIssues = result.coverageIssues.filter((issue) => issue.sourceKind === 'base');
+    expect(baseIssues).toHaveLength(2);
+    expect(baseIssues.map((issue) => [issue.source, issue.code])).toEqual([
+      ['a.base', 'source-read-failed'],
+      ['b.base', 'source-read-failed'],
+    ]);
+    expect(renderMessage(baseIssues[0]!.detail!)).toBe(`a.base: ${expectedReason}`);
+    expect(renderMessage(baseIssues[1]!.detail!)).toBe(`b.base: ${expectedReason}`);
+    expect(readText).not.toHaveBeenCalledWith('a.base');
+    expect(readText).not.toHaveBeenCalledWith('b.base');
+    expect(result.sources.map((source) => source.path)).toEqual(['note.md']);
+  });
+
+  it('reads and parses all base files normally when context assertion succeeds', async () => {
+    const vault = new MemoryVault({
+      'a.base': table,
+      'b.base': table,
+      'note.md': 'Plain note.',
+    });
+    const result = await snapshot(vault);
+    expect(result.coverageIssues).toEqual([]);
+    expect(result.sources.map((source) => source.path)).toEqual(['a.base', 'b.base', 'note.md']);
+  });
+});
+
+describe('full-vault block and single-image read-only protection', () => {
+  it('blocks all writes and deletions while Bases view is open, then protects only the read-only target once closed', async () => {
+    const vault = new MemoryVault({
+      'catalog.base': withFormula,
+      'images/cover.png': PNG,
+      'images/copy.png': PNG,
+      'unused.png': PNG,
+      'note.md': '![[images/copy.png]]',
+    });
+    let viewOpen = true;
+    vault.assertBaseContextsClosed = () => {
+      if (viewOpen) throw new SourceStateError('unsaved-source', 'Close Bases view.');
+    };
+    const processSpy = vi.spyOn(vault, 'process');
+    const removeSpy = vi.spyOn(vault, 'remove');
+
+    const blocked = await snapshot(vault);
+    expect(codes(blocked)).toEqual(['unsaved-source']);
+    expect(() => recyclePlan(blocked, ['unused.png'])).toThrow('Reference coverage is incomplete.');
+    expect(() => mergePlan(blocked, ['images/copy.png'], 'images/cover.png')).toThrow(
+      'Reference coverage is incomplete.',
+    );
+    expect(processSpy).not.toHaveBeenCalled();
+    expect(removeSpy).not.toHaveBeenCalled();
+
+    viewOpen = false;
+    const ready = await snapshot(vault);
+    expect(codes(ready)).toEqual([]);
+    expect(() => recyclePlan(ready, ['images/cover.png'])).toThrow('Image is referenced');
+    expect(removeSpy).not.toHaveBeenCalled();
+
+    const recycle = recyclePlan(ready, ['unused.png']);
+    await new OperationService(vault, digest).execute(recycle, ready);
+    expect(processSpy).not.toHaveBeenCalled();
+    expect(removeSpy).toHaveBeenCalledTimes(1);
+    expect(vault.removed).toEqual(['unused.png']);
+
+    const afterRecycle = await snapshot(vault);
+    const merge = mergePlan(afterRecycle, ['images/copy.png'], 'images/cover.png');
+    await new OperationService(vault, digest).execute(merge, afterRecycle);
+    expect(processSpy).toHaveBeenCalledTimes(1);
+    expect(processSpy).toHaveBeenCalledWith('note.md', expect.any(Function));
+    expect(vault.removed).toEqual(['unused.png', 'images/copy.png']);
+    expect(await vault.exists('images/cover.png')).toBe(true);
+    expect(await vault.readText('catalog.base')).toBe(withFormula);
+    expect(await vault.readText('note.md')).toBe('![[images/cover.png]]');
+  });
+});
+
+describe('UTF-8 byte reuse in scan', () => {
+  it('encodes each source body once for both budget validation and digesting', async () => {
+    const entries: Record<string, string | ArrayBuffer> = {
+      'ascii.md': 'Plain ASCII note with ![[a.png]]',
+      'unicode.md': '中文笔记与表情 😀🎨 ![[b.png]]',
+      'empty.md': '',
+      'catalog.base': table,
+      'a.png': PNG,
+      'b.png': PNG,
+    };
+    const vault = new MemoryVault(entries);
+    const encodeSpy = vi.spyOn(TextEncoder.prototype, 'encode');
+    const readTextSpy = vi.spyOn(vault, 'readText');
+    let digestCalls = 0;
+    const trackedDigest = async (data: ArrayBuffer) => {
+      digestCalls++;
+      return digest(data);
+    };
+    try {
+      const result = await scan(vault, trackedDigest, {
+        revision: 1,
+        settings: DEFAULT_SETTINGS,
+      });
+      expect(result.coverageIssues).toEqual([]);
+      expect(result.sources).toHaveLength(4);
+      expect(readTextSpy).toHaveBeenCalledTimes(4);
+      expect(encodeSpy).toHaveBeenCalledTimes(4);
+      expect(digestCalls).toBe(2);
+      for (const source of result.sources) {
+        expect(source.digest).toBe(await digest(textBytes(source.text)));
+      }
+    } finally {
+      encodeSpy.mockRestore();
+    }
+  });
+
+  it('enforces exact single-source, base-source, and total-source UTF-8 byte budgets', async () => {
+    const baseLimit = 256 * 1024;
+    const baseHeader = table + '\n# ';
+    const exactBase = baseHeader + 'a'.repeat(baseLimit - Buffer.byteLength(baseHeader));
+    expect(Buffer.byteLength(exactBase)).toBe(baseLimit);
+    const okBaseVault = new MemoryVault({ 'ok.base': exactBase });
+    expect(codes(await snapshot(okBaseVault))).toEqual([]);
+
+    const overBaseVault = new MemoryVault({ 'over.base': exactBase + 'é' });
+    expect(codes(await snapshot(overBaseVault))).toEqual(['source-budget-exceeded']);
+
+    const exactMarkdown = 'x'.repeat(MAX_SOURCE);
+    const okMdVault = new MemoryVault({ 'ok.md': exactMarkdown });
+    expect(codes(await snapshot(okMdVault))).toEqual([]);
+
+    const staleOverMdVault = new MemoryVault({ 'over.md': exactMarkdown + 'x' });
+    const listed = staleOverMdVault.list.bind(staleOverMdVault);
+    staleOverMdVault.list = () =>
+      listed().map((file) => (file.path === 'over.md' ? { ...file, size: 10 } : file));
+    expect(codes(await snapshot(staleOverMdVault))).toEqual(['source-budget-exceeded']);
+
+    const exactCanvas = '{"nodes":[],"edges":[]}'.padEnd(MAX_SOURCE, ' ');
+    const totalEntries: Record<string, string> = {};
+    for (let i = 0; i < 16; i++)
+      totalEntries[`chunk-${String(i).padStart(2, '0')}.canvas`] = exactCanvas;
+    expect(codes(await snapshot(new MemoryVault(totalEntries)))).toEqual([]);
+
+    const overTotalVault = new MemoryVault({ ...totalEntries, 'extra.md': 'a' });
+    expect(codes(await snapshot(overTotalVault))).toEqual(['source-budget-exceeded']);
+  }, 15000);
 });

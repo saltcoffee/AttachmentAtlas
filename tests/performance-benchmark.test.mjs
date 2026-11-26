@@ -1,14 +1,20 @@
 import { describe, expect, it, onTestFinished } from 'vitest';
 import { Buffer } from 'node:buffer';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdirSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
+import { readFile, unlink } from 'node:fs/promises';
+import { basename, join } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
 import process from 'node:process';
 import { crc32, inflateSync } from 'node:zlib';
 import { performanceImage } from '../scripts/performance-images.mjs';
 import { performanceOptions, summarizePerformance } from '../scripts/benchmark-performance.mjs';
+import {
+  assertEmptyCoverage,
+  buildSnapshotManifest,
+  firstDiff,
+  manifestDigest,
+} from '../scripts/snapshot-manifest.mjs';
 import { createPerformanceFixture, selectionForFixture } from '../scripts/performance-fixture.mjs';
 import { createPerformanceDirectory } from '../scripts/performance-temp.mjs';
 import { requireCompletedResult } from '../scripts/benchmark-result.mjs';
@@ -208,4 +214,111 @@ describe('performance measurement evidence', () => {
     expect(() => selectionForFixture(fixture, 'merge', 5)).toThrow();
     expect(() => selectionForFixture(fixture, 'recycle', 2)).toThrow();
   });
+
+  it('validates coverageIssues for current and blockers only for baseline', () => {
+    expect(() => assertEmptyCoverage({ coverageIssues: [] }, 'current')).not.toThrow();
+    expect(() => assertEmptyCoverage({ blockers: [] }, 'baseline')).not.toThrow();
+    expect(() => assertEmptyCoverage({ coverageIssues: [{ code: 'x' }] }, 'current')).toThrow();
+    expect(() => assertEmptyCoverage({ blockers: [] }, 'current')).toThrow('coverageIssues');
+    expect(() => assertEmptyCoverage({ coverageIssues: [] }, 'baseline')).toThrow('blockers');
+    expect(() => assertEmptyCoverage({ blockers: ['x'] }, 'baseline')).toThrow();
+  });
+
+  it('detects reference target and duplicate keep diffs via canonical snapshot manifests', () => {
+    const baseSnapshot = {
+      sources: [
+        {
+          path: 'note.md',
+          kind: 'markdown',
+          digest: 'src-digest',
+          hints: [],
+          references: [
+            {
+              source: 'note.md',
+              raw: '![[a.png]]',
+              linkpath: 'a.png',
+              target: 'a.png',
+              style: 'wiki',
+              sourceKind: 'markdown',
+              readOnly: false,
+              start: 0,
+              end: 10,
+            },
+          ],
+        },
+      ],
+      media: [
+        {
+          path: 'a.png',
+          digest: 'img-digest',
+          format: 'PNG',
+          width: 2,
+          height: 2,
+          size: 100,
+          references: [],
+          reasons: [],
+        },
+        {
+          path: 'b.png',
+          digest: 'img-digest',
+          format: 'PNG',
+          width: 2,
+          height: 2,
+          size: 100,
+          references: [],
+          reasons: [],
+        },
+      ],
+      duplicates: [[{ path: 'a.png' }, { path: 'b.png' }]],
+      coverageIssues: [],
+    };
+    const m1 = buildSnapshotManifest(baseSnapshot);
+    const m2 = buildSnapshotManifest(JSON.parse(JSON.stringify(baseSnapshot)));
+    expect(manifestDigest(m1)).toBe(manifestDigest(m2));
+    expect(firstDiff(m1, m2)).toBeNull();
+
+    const changedTarget = JSON.parse(JSON.stringify(baseSnapshot));
+    changedTarget.sources[0].references[0].target = 'b.png';
+    const targetDiff = firstDiff(m1, buildSnapshotManifest(changedTarget));
+    expect(targetDiff).toEqual({
+      path: '$.sources.note.md.references[0].target',
+      baseline: 'a.png',
+      candidate: 'b.png',
+    });
+
+    const changedKeep = JSON.parse(JSON.stringify(baseSnapshot));
+    changedKeep.duplicates = [[{ path: 'b.png' }, { path: 'a.png' }]];
+    const keepDiff = firstDiff(m1, buildSnapshotManifest(changedKeep));
+    expect(keepDiff).toEqual({
+      path: '$.duplicates[0].keepPath',
+      baseline: 'a.png',
+      candidate: 'b.png',
+    });
+  });
+
+  it('completes a real CLI scan round on B18-2M and writes a canonical snapshot manifest', async () => {
+    const preexisting = new Set(existsSync('artifacts') ? readdirSync('artifacts') : []);
+    const child = spawnSync(
+      process.execPath,
+      [script, '--sample=B18-2M', '--task=scan', '--repetitions=1'],
+      { encoding: 'utf8', timeout: 30000 },
+    );
+    const reportPath = child.stdout.match(/^Report: (.+)$/m)?.[1];
+    let manifestPath;
+    onTestFinished(async () => {
+      if (reportPath) await unlink(reportPath).catch(() => {});
+      if (manifestPath && !preexisting.has(basename(manifestPath)))
+        await unlink(manifestPath).catch(() => {});
+    });
+    expect(child.status).toBe(0);
+    expect(reportPath).toBeTruthy();
+    const report = JSON.parse(await readFile(reportPath, 'utf8'));
+    manifestPath = report.measurements[0]?.snapshotManifest;
+    expect(report.state).toBe('completed');
+    expect(report.cleanup.state).toBe('removed');
+    expect(existsSync(report.fixture.root)).toBe(false);
+    expect(report.fixture.manifestDigest).toMatch(/^[a-f0-9]{64}$/);
+    expect(report.measurements[0].snapshotDigest).toMatch(/^[a-f0-9]{64}$/);
+    expect(existsSync(manifestPath)).toBe(true);
+  }, 30000);
 });

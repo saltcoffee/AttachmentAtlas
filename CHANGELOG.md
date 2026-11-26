@@ -4,6 +4,19 @@ Notable user-facing changes are recorded here. Version entries are used as relea
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-11-26
+
+### Changed
+
+- Reuse UTF-8 encoded source bytes across budget validation and SHA-256 digesting during scans.
+- Optimize unreferenced image selection updates to avoid repeated full-media lookups per selected path.
+- Update performance benchmark assertions to the `coverageIssues` contract and record canonical snapshot manifests for scan diff verification.
+
+### Fixed
+
+- Normalize thrown Bases context errors to `Error` instances while preserving `SourceStateError` codes and details.
+- Use Obsidian `createSpan` helpers across result and organizer UI views and enforce `@typescript-eslint/only-throw-error` and `obsidianmd/prefer-create-el` in ESLint.
+
 ## [0.1.9] - 2026-11-18
 
 ### Added

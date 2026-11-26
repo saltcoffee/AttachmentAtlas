@@ -91,6 +91,19 @@ describe('session result presentation', () => {
     expect(root.all().filter((element) => element.tag === 'strong')).toHaveLength(25);
   });
 
+  it('renders the four group-state summary spans in order with separators', () => {
+    host.language = 'en';
+    const root = new UiElement();
+    new OperationResultView().render(root as unknown as HTMLElement, report(), false, vi.fn());
+    const spans = root.children[0]!.children.filter((element) => element.tag === 'span');
+    expect(spans.map((element) => element.text)).toEqual([
+      'Completed: 1 groups · ',
+      'Partially completed: 0 groups · ',
+      'Not processed: 98 groups · ',
+      'Result unconfirmed: 1 groups · ',
+    ]);
+  });
+
   it('keeps the last result read-only and disables rescanning while another task is busy', () => {
     host.language = 'en';
     const root = new UiElement(),

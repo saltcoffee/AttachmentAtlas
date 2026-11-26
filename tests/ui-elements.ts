@@ -18,6 +18,7 @@ export class UiElement {
   onchange?: () => void;
   oninput?: () => void;
   ontoggle?: () => void;
+  onerror?: () => void;
   constructor(readonly tag = 'div') {}
   get firstElementChild(): UiElement | null {
     return this.children[0] ?? null;

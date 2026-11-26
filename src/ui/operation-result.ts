@@ -72,7 +72,7 @@ export class OperationResultView {
       });
       for (const state of ['completed', 'partial', 'unprocessed', 'unconfirmed'] as const)
         if (result.groups.length)
-          root.createEl('span', {
+          root.createSpan({
             text: t('{state}: {count} groups · ', {
               state: t(groupLabels[state]),
               count: result.groups.filter((group) => group.state === state).length,

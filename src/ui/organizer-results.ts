@@ -93,7 +93,7 @@ export class OrganizerResults {
       });
       img.onerror = () => {
         img.remove();
-        row.createEl('span', {
+        row.createSpan({
           text: t('Preview unavailable: {path}', { path: image.path }),
           cls: 'atlas-muted',
           attr: { role: 'status' },
@@ -175,7 +175,7 @@ export class OrganizerResults {
 
   private reasons(parent: HTMLElement, reasons: readonly Text[]): void {
     reasons.forEach((reason) =>
-      parent.createEl('span', { text: ` · ${problem(reason)}`, cls: 'atlas-muted' }),
+      parent.createSpan({ text: ` · ${problem(reason)}`, cls: 'atlas-muted' }),
     );
   }
 
