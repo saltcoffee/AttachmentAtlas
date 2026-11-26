@@ -5,7 +5,7 @@ import type { Media, Plan, Snapshot } from '../src/domain/model';
 import { OrganizerSelection, duplicateGroupKey } from '../src/application/organizer-selection';
 import { OrganizerResults } from '../src/ui/organizer-results';
 import { createOrganizerViewState } from '../src/ui/organizer-state';
-import { ConfirmPlanModal } from '../src/ui/modals';
+import { ConfirmPlanModal, exactBytes } from '../src/ui/modals';
 import * as preview from '../src/ui/plan-preview';
 import { UiElement } from './ui-elements';
 
@@ -375,6 +375,175 @@ describe('organizer interaction regressions', () => {
     expect(
       detail.all().filter((element) => element.attrs.class === 'atlas-reference'),
     ).toHaveLength(1);
+  });
+
+  it('renders span helpers for preview failures, unreferenced blockers, and kept-image reasons', () => {
+    const ui = setup([2]);
+    const group = ui.groups[0]!;
+    group[0]!.reasons = ['Protected path.', 'Outside the selected image scope.'];
+    ui.render();
+
+    const reasonSpans = ui.root
+      .all()
+      .filter((element) => element.tag === 'span' && element.attrs.class === 'atlas-muted' && element.text.startsWith(' · ') && !element.text.startsWith(' · Recommended:'));
+    expect(reasonSpans.map((element) => element.text)).toEqual([
+      ' · Protected path.',
+      ' · Outside the selected image scope.',
+    ]);
+
+    ui.click(`expand:${duplicateGroupKey(group)}`);
+    const img = ui.root.all().find((element) => element.tag === 'img')!;
+    const imageRow = img.parentElement!;
+    img.onerror?.();
+    expect(imageRow.children.some((child) => child.tag === 'img')).toBe(false);
+    const fallbackSpan = imageRow.children.find((child) => child.tag === 'span');
+    expect(fallbackSpan).toBeDefined();
+    expect(fallbackSpan?.text).toBe(`Preview unavailable: ${group[0]!.path}`);
+    expect(fallbackSpan?.attrs.class).toBe('atlas-muted');
+    expect(fallbackSpan?.attrs.role).toBe('status');
+
+    ui.state.tab = 'unreferenced';
+    ui.render();
+    const previewButton = ui.control('preview:unreferenced');
+    expect(previewButton.disabled).toBe(true);
+    expect((previewButton as unknown as { title?: string }).title).toBe(
+      'Select images to recycle.',
+    );
+    const blockerSpan = ui.root
+      .all()
+      .find(
+        (element) =>
+          element.tag === 'span' &&
+          element.attrs.class === 'atlas-muted' &&
+          element.attrs.role === 'status',
+      );
+    expect(blockerSpan?.text).toBe('Select images to recycle.');
+  });
+
+  it('updates unreferenced counts, hidden summaries, pagination, over-limit states, and synced views', () => {
+    const totalCount = 120;
+    const media: Media[] = Array.from({ length: totalCount }, (_, index) => ({
+      path: `folder-${index < 60 ? 'a' : 'b'}/${String(index).padStart(3, '0')}.png`,
+      size: 1000 + index,
+      mtime: 0,
+      format: 'PNG',
+      digest: `digest-${index}`,
+      reasons: [],
+      references: [],
+    }));
+    const snapshot: Snapshot = {
+      revision: 1,
+      settings: { scope: '', protectedPaths: [], preferredFolder: '' },
+      media,
+      files: media,
+      duplicates: [],
+      sources: [],
+      coverageIssues: [],
+    };
+    const selection = new OrganizerSelection();
+    selection.acceptSnapshot(selection.beginScan(), snapshot);
+    const plugin = {
+      selection,
+      snapshot,
+      busy: false,
+      app: { vault: { adapter: { getResourcePath: (path: string) => path } } },
+    } as unknown as AttachmentAtlas;
+
+    const createView = (viewId: number) => {
+      const state = createOrganizerViewState();
+      state.tab = 'unreferenced';
+      state.sort = { key: 'path', direction: 'asc' };
+      const root = new UiElement();
+      const onPreview = vi.fn();
+      const results = new OrganizerResults(plugin, state, viewId, () => true, onPreview);
+      const render = () => results.render(root as unknown as HTMLElement, snapshot);
+      const unsubscribe = selection.subscribe(() => results.updateSelection(snapshot));
+      render();
+      return { state, root, onPreview, results, render, unsubscribe };
+    };
+
+    const primary = createView(1);
+    const secondary = createView(2);
+    try {
+      const control = (view: typeof primary, key: string) =>
+        view.root.all().find((element) => element.dataset.focusKey === key)!;
+
+      // 0 selected
+      expect(primary.root.contents()).toContain(
+        `0 selected · ${exactBytes(0)} · 0 outside filter · 0 outside current page`,
+      );
+      expect(control(primary, 'preview:unreferenced').disabled).toBe(true);
+
+      // 1 selected
+      selection.setUnreferencedSelected([media[0]!.path], true);
+      expect(primary.root.contents()).toContain(
+        `1 selected · ${exactBytes(1000)} · 0 outside filter · 0 outside current page`,
+      );
+      expect(secondary.root.contents()).toContain(
+        `1 selected · ${exactBytes(1000)} · 0 outside filter · 0 outside current page`,
+      );
+      expect(control(primary, 'preview:unreferenced').disabled).toBe(false);
+
+      // 50 selected (page 1 full)
+      selection.setUnreferencedSelected(
+        media.slice(0, 50).map((image) => image.path),
+        true,
+      );
+      const sum50 = media.slice(0, 50).reduce((acc, image) => acc + image.size, 0);
+      expect(primary.root.contents()).toContain(
+        `50 selected · ${exactBytes(sum50)} · 0 outside filter · 0 outside current page`,
+      );
+      expect(control(primary, 'preview:unreferenced').disabled).toBe(false);
+
+      // 100 selected across pages (50 outside current page)
+      selection.setUnreferencedSelected(
+        media.slice(50, 100).map((image) => image.path),
+        true,
+      );
+      const sum100 = media.slice(0, 100).reduce((acc, image) => acc + image.size, 0);
+      expect(primary.root.contents()).toContain(
+        `100 selected · ${exactBytes(sum100)} · 0 outside filter · 50 outside current page`,
+      );
+      expect(control(primary, 'preview:unreferenced').disabled).toBe(false);
+
+      // 101 selected (exceeds 100 limit)
+      selection.setUnreferencedSelected([media[100]!.path], true);
+      expect(primary.root.contents()).toContain('Selected images exceed the 100 image limit.');
+      expect(primary.root.contents()).toContain('Selection exceeds the operation limit by 1 images.');
+      expect(control(primary, 'preview:unreferenced').disabled).toBe(true);
+
+      // Deselect 1 -> back to 100, and filter hides folder-a (60 selected outside filter)
+      selection.setUnreferencedSelected([media[100]!.path], false);
+      expect(control(primary, 'preview:unreferenced').disabled).toBe(false);
+      primary.state.query = { ...primary.state.query, path: 'folder-b/' };
+      primary.render();
+      expect(primary.root.contents()).toContain(
+        `100 selected · ${exactBytes(sum100)} · 60 outside filter · 60 outside current page`,
+      );
+      // Secondary view keeps its own unfiltered page & focus independent of primary's filter.
+      expect(secondary.root.contents()).toContain(
+        `100 selected · ${exactBytes(sum100)} · 0 outside filter · 50 outside current page`,
+      );
+
+      // Preview submits exact selection order
+      control(primary, 'preview:unreferenced').onclick?.();
+      expect(primary.onPreview).toHaveBeenCalledExactlyOnceWith({
+        kind: 'recycle-unreferenced',
+        retirePaths: media.slice(0, 100).map((image) => image.path),
+      });
+
+      // Rescan clears selections
+      selection.acceptSnapshot(selection.beginScan(), snapshot);
+      expect(primary.root.contents()).toContain(
+        `0 selected · ${exactBytes(0)} · 0 outside filter · 0 outside current page`,
+      );
+      expect(secondary.root.contents()).toContain(
+        `0 selected · ${exactBytes(0)} · 0 outside filter · 0 outside current page`,
+      );
+    } finally {
+      primary.unsubscribe();
+      secondary.unsubscribe();
+    }
   });
 });
 

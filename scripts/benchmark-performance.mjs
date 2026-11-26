@@ -6,8 +6,8 @@ import { setTimeout, clearTimeout } from 'node:timers';
 import { parseArgs } from 'node:util';
 import { cpus, platform, release, totalmem } from 'node:os';
 import { performance } from 'node:perf_hooks';
-import { mkdir, writeFile } from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import {
   createPerformanceFixture,
@@ -16,6 +16,12 @@ import {
 } from './performance-fixture.mjs';
 import { freezePerformanceBaseline, loadPerformanceModule } from './performance-module.mjs';
 import { requireCompletedResult } from './benchmark-result.mjs';
+import {
+  assertEmptyCoverage,
+  buildSnapshotManifest,
+  canonicalJson,
+  manifestDigest,
+} from './snapshot-manifest.mjs';
 
 const { AbortController } = globalThis;
 
@@ -163,6 +169,9 @@ export async function runPerformance(options) {
     const { api, metadata } = await loadPerformanceModule(options.implementation);
     fixture = await createPerformanceFixture(options.sample, controller.signal);
     const vault = observeVault(fixture.vault);
+    const fixtureManifestDigest = createHash('sha256')
+      .update(await readFile(fixture.inventory.manifest))
+      .digest('hex');
     report = {
       schema: 1,
       state: 'running',
@@ -175,7 +184,7 @@ export async function runPerformance(options) {
         cpu: cpus()[0]?.model,
         memoryBytes: totalmem(),
       },
-      fixture: { root: fixture.root, ...fixture.inventory },
+      fixture: { root: fixture.root, ...fixture.inventory, manifestDigest: fixtureManifestDigest },
       observation: fixture.observation,
       cleanup: { state: 'pending' },
       cache:
@@ -236,7 +245,7 @@ export async function runPerformance(options) {
           phases,
           'scan',
         );
-        assert.equal(snapshot.blockers.length, 0, 'Fixture reference coverage is incomplete.');
+        assertEmptyCoverage(snapshot, options.implementation);
         assert.equal(snapshot.media.length, fixture.inventory.images);
         assert(
           snapshot.media.every((image) => image.digest && !image.reasons.length),
@@ -271,6 +280,18 @@ export async function runPerformance(options) {
           await fixture.verify(plan);
           row.harnessVerificationMs = performance.now() - verificationStart;
         } else row.totalMs = performance.now() - started;
+        if (options.implementation === 'current') {
+          const manifest = buildSnapshotManifest(snapshot);
+          const snapshotDigest = manifestDigest(manifest);
+          const manifestPath = `artifacts/snapshot-manifest-${snapshotDigest.slice(0, 12)}.json`;
+          try {
+            await writeFile(manifestPath, canonicalJson(manifest) + '\n', { flag: 'wx' });
+          } catch (error) {
+            if (error?.code !== 'EEXIST') throw error;
+          }
+          row.snapshotDigest = snapshotDigest;
+          row.snapshotManifest = manifestPath;
+        }
         assert(
           row.totalMs <= options.timeoutMs && !controller.signal.aborted,
           'Benchmark deadline exceeded.',

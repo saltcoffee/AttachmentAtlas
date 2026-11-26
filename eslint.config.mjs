@@ -33,6 +33,8 @@ export default ts.config(
       'obsidianmd/prefer-window-timers': 'error',
       'obsidianmd/prefer-file-manager-trash-file': 'error',
       'obsidianmd/no-global-this': 'error',
+      '@typescript-eslint/only-throw-error': 'error',
+      'obsidianmd/prefer-create-el': 'error',
     },
   },
 );

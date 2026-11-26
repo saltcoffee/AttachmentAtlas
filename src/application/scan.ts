@@ -34,7 +34,6 @@ import { protectedImagePaths, type ReferenceIndexStats } from './reference-index
 
 const BASE_SOURCE_LIMIT = 256 * 1024;
 const TOTAL_SOURCE_LIMIT = 64 * 1024 * 1024;
-const UTF8 = new TextEncoder();
 
 export interface ScanOptions {
   revision: number;
@@ -74,11 +73,11 @@ export async function scan(
     checkCancelled(options.signal);
   };
   const resolve = createReferenceResolver(fileNames);
-  let baseContextError: unknown;
+  let baseContextError: Error | undefined;
   try {
     vault.assertBaseContextsClosed(fileNames.filter((path) => /\.base$/i.test(path)));
   } catch (error) {
-    baseContextError = error;
+    baseContextError = error instanceof Error ? error : new AtlasError(errorDetail(error));
   }
   for (const [index, file] of files.entries()) {
     check();
@@ -124,7 +123,8 @@ export async function scan(
       continue;
     }
     // The listed metadata size can be stale; check the actual decoded UTF-8 bytes before parsing.
-    const actualBytes = UTF8.encode(text).byteLength;
+    const encoded = textBytes(text);
+    const actualBytes = encoded.byteLength;
     sourceBytes += actualBytes - file.size;
     if (actualBytes > limit || sourceBytes > TOTAL_SOURCE_LIMIT) {
       coverageIssues.push(
@@ -202,7 +202,7 @@ export async function scan(
     sources.push({
       path: file.path,
       text,
-      digest: await digest(textBytes(text)),
+      digest: await digest(encoded),
       kind,
       references: parsed.references,
       hints: parsed.hints,

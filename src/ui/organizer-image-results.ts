@@ -38,22 +38,25 @@ export class OrganizerImageResults {
   }
 
   updateSelection(snapshot: Snapshot): void {
-    const all = snapshot.media.filter((image) => {
-      if (this.context.state.tab === 'unreferenced') return !image.references.length;
-      if (this.context.state.tab === 'blocked')
-        return (
-          image.reasons.length > 0 || (!image.references.length && snapshot.coverageIssues.length > 0)
-        );
-      return true;
-    });
-    const filtered = all.filter((image) => matchesQuery(image, this.context.state.query)),
-      selection = this.context.plugin.selection.state,
+    const selection = this.context.plugin.selection.state,
       selectedPaths = this.context.state.tab === 'unreferenced' ? selection.unreferencedPaths : [],
-      mode = this.context.state.unreferencedMode,
+      selectedSet = new Set(selectedPaths),
+      selectedImages: Media[] = [],
+      all = snapshot.media.filter((image) => {
+        if (selectedSet.has(image.path)) selectedImages.push(image);
+        if (this.context.state.tab === 'unreferenced') return !image.references.length;
+        if (this.context.state.tab === 'blocked')
+          return (
+            image.reasons.length > 0 ||
+            (!image.references.length && snapshot.coverageIssues.length > 0)
+          );
+        return true;
+      });
+    const mode = this.context.state.unreferencedMode,
       visible =
         this.context.state.tab === 'unreferenced' && mode === 'selected'
-          ? all.filter((image) => selectedPaths.includes(image.path))
-          : filtered,
+          ? all.filter((image) => selectedSet.has(image.path))
+          : all.filter((image) => matchesQuery(image, this.context.state.query)),
       images = sortImages(visible, this.context.state.sort.key, this.context.state.sort.direction),
       page = clampPage(
         this.context.state.pageByTab[this.context.state.tab],
@@ -65,7 +68,13 @@ export class OrganizerImageResults {
 
     this.toolbar.empty();
     if (this.context.state.tab === 'unreferenced')
-      this.renderUnreferencedActions(this.toolbar, snapshot, pageImages, selectedPaths);
+      this.renderUnreferencedActions(
+        this.toolbar,
+        snapshot,
+        pageImages,
+        selectedPaths,
+        selectedImages,
+      );
     this.empty.hidden = images.length > 0;
     this.empty.setText(
       this.context.state.tab === 'unreferenced' && mode === 'selected'
@@ -92,7 +101,7 @@ export class OrganizerImageResults {
           row = { element, checkbox };
           this.rows.set(image.path, row);
         }
-        if (row.checkbox) row.checkbox.checked = selectedPaths.includes(image.path);
+        if (row.checkbox) row.checkbox.checked = selectedSet.has(image.path);
         return row.element;
       }),
     );
@@ -115,11 +124,9 @@ export class OrganizerImageResults {
     snapshot: Snapshot,
     pageImages: Media[],
     selectedPaths: readonly string[],
+    selected: readonly Media[],
   ): void {
-    const selected = selectedPaths
-        .map((path) => snapshot.media.find((image) => image.path === path))
-        .filter((image): image is Media => !!image),
-      size = checkedByteTotal(selected.map((image) => image.size)),
+    const size = checkedByteTotal(selected.map((image) => image.size)),
       visible = new Set(pageImages.map((image) => image.path)),
       hiddenByFilter = selected.filter(
         (image) => !matchesQuery(image, this.context.state.query),
@@ -193,7 +200,7 @@ export class OrganizerImageResults {
         retirePaths: [...selectedPaths],
       });
     if (blocker)
-      toolbar.createEl('span', { text: blocker, cls: 'atlas-muted', attr: { role: 'status' } });
+      toolbar.createSpan({ text: blocker, cls: 'atlas-muted', attr: { role: 'status' } });
     if (selected.length > MAX_RETIRE_COUNT)
       toolbar.createEl('p', {
         text: t('Selection exceeds the operation limit by {count} images.', {
