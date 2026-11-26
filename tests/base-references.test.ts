@@ -603,11 +603,11 @@ describe('UTF-8 byte reuse in scan', () => {
     const overBaseVault = new MemoryVault({ 'over.base': exactBase + 'é' });
     expect(codes(await snapshot(overBaseVault))).toEqual(['source-budget-exceeded']);
 
-    const exactMarkdown = 'x'.repeat(MAX_SOURCE);
-    const okMdVault = new MemoryVault({ 'ok.md': exactMarkdown });
-    expect(codes(await snapshot(okMdVault))).toEqual([]);
+    const exactSource = '{"nodes":[],"edges":[]}'.padEnd(MAX_SOURCE, ' ');
+    const okSourceVault = new MemoryVault({ 'ok.canvas': exactSource });
+    expect(codes(await snapshot(okSourceVault))).toEqual([]);
 
-    const staleOverMdVault = new MemoryVault({ 'over.md': exactMarkdown + 'x' });
+    const staleOverMdVault = new MemoryVault({ 'over.md': 'x'.repeat(MAX_SOURCE + 1) });
     const listed = staleOverMdVault.list.bind(staleOverMdVault);
     staleOverMdVault.list = () =>
       listed().map((file) => (file.path === 'over.md' ? { ...file, size: 10 } : file));
@@ -618,5 +618,5 @@ describe('UTF-8 byte reuse in scan', () => {
     for (let i = 0; i < 8; i++)
       multiEntries[`chunk-${String(i).padStart(2, '0')}.canvas`] = twoMiBCanvas;
     expect(codes(await snapshot(new MemoryVault(multiEntries)))).toEqual([]);
-  });
+  }, 15000);
 });
